@@ -71,9 +71,9 @@ copy_filestore(){
     local FROM_DB="$2"
     local TO_SERVICE="$3"
     local TO_DB="$4"
-    mkdir -p /srv/datastore/data/"$TO_SERVICE"/var/lib/odoo/filestore/"$TO_DB" || exit 1
-    rm -rf /srv/datastore/data/"$TO_SERVICE"/var/lib/odoo/filestore/"$TO_DB" || exit 1
-    cp -a /srv/datastore/data/"$FROM_SERVICE"/var/lib/odoo/filestore/"$FROM_DB" /srv/datastore/data/"$TO_SERVICE"/var/lib/odoo/filestore/"$TO_DB" || exit 1
+    sudo mkdir -p /srv/datastore/data/"$TO_SERVICE"/var/lib/odoo/filestore/"$TO_DB" || exit 1
+    sudo rm -rf /srv/datastore/data/"$TO_SERVICE"/var/lib/odoo/filestore/"$TO_DB" || exit 1
+    sudo cp -a /srv/datastore/data/"$FROM_SERVICE"/var/lib/odoo/filestore/"$FROM_DB" /srv/datastore/data/"$TO_SERVICE"/var/lib/odoo/filestore/"$TO_DB" || exit 1
     echo "Filestore $FROM_SERVICE/$FROM_DB copied."
 }
 export -f copy_filestore
@@ -118,7 +118,7 @@ fi
 # Remove finale database and datastore if already exists (we need a virgin Odoo)
 if docker exec -u 70 "$POSTGRES_SERVICE_NAME" pgm ls | grep -q "$FINALE_SERVICE_NAME"; then
     docker exec -u 70 "$POSTGRES_SERVICE_NAME" pgm rm -f "$FINALE_SERVICE_NAME"
-    rm -rf /srv/datastore/data/"$FINALE_SERVICE_NAME"/var/lib/odoo/filestore/"$FINALE_SERVICE_NAME"
+    sudo rm -rf /srv/datastore/data/"$FINALE_SERVICE_NAME"/var/lib/odoo/filestore/"$FINALE_SERVICE_NAME"
 fi
 
 compose --debug run "$FINALE_SERVICE_NAME" -i base --stop-after-init --no-http
