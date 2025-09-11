@@ -52,7 +52,7 @@ ou15:
 ou16:
   charm: odoo-tecnativa
   docker-compose:
-    image: docker.0k.io/mirror/odoo:rc_16.0-MYC-INIT
+    image: docker.0k.io/mirror/odoo:rc_16.0-ELABORE-LIGHT
     ## Important to keep as a list: otherwise it'll overwrite charm's arguments.
     command:
       - "--log-level=debug"
