@@ -75,4 +75,4 @@ ou17:
 
 postgres:
   docker-compose:
-    image: docker.0k.io/postgres:12.15.0-myc
+    image: docker.0k.io/postgres:17.2.0-myc
