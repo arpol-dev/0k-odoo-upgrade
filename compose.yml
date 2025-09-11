@@ -73,6 +73,18 @@ ou17:
   options:
     workers: 0
 
+ou18:
+  charm: odoo-tecnativa
+  docker-compose:
+    image: docker.0k.io/mirror/odoo:rc_18.0-ELABORE-LIGHT
+    ## Important to keep as a list: otherwise it'll overwrite charm's arguments.
+    command:
+      - "--log-level=debug"
+      - "--limit-time-cpu=1000000"
+      - "--limit-time-real=1000000"
+  options:
+    workers: 0
+
 postgres:
   docker-compose:
     image: docker.0k.io/postgres:17.2.0-myc
