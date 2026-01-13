@@ -21,4 +21,4 @@ exec_python_script_in_odoo_shell "$DB_NAME" "$DB_NAME" "$PYTHON_SCRIPT" || exit 
 
 
 # Launch Odoo with database in finale version to run all updates
-compose --debug run "$ODOO_SERVICE" -u all --stop-after-init --no-http
+compose --debug run "$ODOO_SERVICE" -u all --log-level=debug --stop-after-init --no-http
