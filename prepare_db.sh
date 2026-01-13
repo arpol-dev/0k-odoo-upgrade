@@ -79,6 +79,26 @@ echo "N - No, stop the upgrade"
 read -n 1 -p "Your choice: " choice
 case "$choice" in
     [Yy] ) echo "
+Let's go on!";;
+    [Nn] ) echo "
+Upgrade cancelled!"; exit 1;;
+    * ) echo "
+Please answer by Y or N.";;
+esac
+
+
+# Check the views
+PYTHON_SCRIPT=pre_migration_view_checking.py
+echo "Check views with script $PYTHON_SCRIPT ..."
+exec_python_script_in_odoo_shell "$DB_NAME" "$DB_NAME" "$PYTHON_SCRIPT" || exit 1
+
+echo "
+Do you accept to migrate the database with the current views states? (Y/N/R)"
+echo "Y - Yes, let's go on with the upgrade."
+echo "N - No, stop the upgrade"
+read -n 1 -p "Your choice: " choice
+case "$choice" in
+    [Yy] ) echo "
 Upgrade confirmed!";;
     [Nn] ) echo "
 Upgrade cancelled!"; exit 1;;
