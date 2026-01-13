@@ -78,6 +78,15 @@ copy_filestore(){
 }
 export -f copy_filestore
 
+# Function to launch python scripts in Odoo Shell
+exec_python_script_in_odoo_shell(){
+	local SERVICE_NAME="$1"
+	local DB_NAME="$2"
+	local PYTHON_SCRIPT="$3"
+	compose --debug run "$SERVICE_NAME" shell -d "$DB_NAME" --no-http --stop-after-init < "$PYTHON_SCRIPT"
+}
+export -f exec_python_script_in_odoo_shell
+
 ##############################################
 # CHECKS ALL NEEDED COMPONENTS ARE AVAILABLE #
 ##############################################
