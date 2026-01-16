@@ -17,8 +17,21 @@ export FINALE_DB_NAME="ou${FINAL_VERSION}"
 # Define finale odoo service name
 FINALE_SERVICE_NAME="${FINALE_DB_NAME}"
 
-# Service postgres name
-export POSTGRES_SERVICE_NAME="lokavaluto_postgres_1"
+# Service postgres name (dynamically retrieved from running containers)
+POSTGRES_CONTAINERS=$(docker ps --format '{{.Names}}' | grep postgres)
+POSTGRES_COUNT=$(echo "$POSTGRES_CONTAINERS" | grep -c .)
+
+if [ "$POSTGRES_COUNT" -eq 0 ]; then
+    echo "ERROR: No running PostgreSQL container found. Please start a PostgreSQL container and try again." >&2
+    exit 1
+elif [ "$POSTGRES_COUNT" -gt 1 ]; then
+    echo "ERROR: Multiple PostgreSQL containers found:" >&2
+    echo "$POSTGRES_CONTAINERS" >&2
+    echo "Please ensure only one PostgreSQL container is running." >&2
+    exit 1
+fi
+
+export POSTGRES_SERVICE_NAME="$POSTGRES_CONTAINERS"
 
 #############################################
 # DISPLAYS ALL INPUTS PARAMETERS
@@ -93,14 +106,6 @@ export -f exec_python_script_in_odoo_shell
 
 echo "
 ==== CHECKS ALL NEEDED COMPONENTS ARE AVAILABLE ===="
-
-# Check POSTGRES container is running
-if ! docker ps | grep -q "$POSTGRES_SERVICE_NAME"; then
-    printf "Docker container %s is not running.\n" "$POSTGRES_SERVICE_NAME" >&2
-    return 1
-else
-    echo "UPGRADE: container $POSTGRES_SERVICE_NAME running."
-fi
 
 # Check origin database is in the local postgres
 DB_EXISTS=$(docker exec -it -u 70 $POSTGRES_SERVICE_NAME psql -tc "SELECT 1 FROM pg_database WHERE datname = '$ORIGIN_DB_NAME'" | tr -d '[:space:]')
