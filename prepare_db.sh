@@ -1,11 +1,13 @@
 #!/bin/bash
 set -euo pipefail
 
-# Global variables
 ODOO_SERVICE="$1"
 DB_NAME="$2"
 DB_FINALE_MODEL="$3"
 DB_FINALE_SERVICE="$4"
+
+TMPDIR=$(mktemp -d)
+trap 'rm -rf "$TMPDIR"' EXIT
 
 echo "Start database preparation"
 
@@ -56,21 +58,18 @@ EOF
 )
 echo "Retrieve 404 addons... "
 echo "SQL REQUEST = $SQL_404_ADDONS_LIST"
-query_postgres_container "$SQL_404_ADDONS_LIST" "$DB_NAME" > 404_addons || exit 1
+query_postgres_container "$SQL_404_ADDONS_LIST" "$DB_NAME" > "${TMPDIR}/404_addons"
 
-# Keep only the installed add-ons
 INSTALLED_ADDONS="SELECT name FROM ir_module_module WHERE state='installed';"
-query_postgres_container "$INSTALLED_ADDONS" "$DB_NAME" > installed_addons || exit 1
+query_postgres_container "$INSTALLED_ADDONS" "$DB_NAME" > "${TMPDIR}/installed_addons"
 
-grep -Fx -f 404_addons installed_addons > final_404_addons
-rm -f 404_addons installed_addons
+grep -Fx -f "${TMPDIR}/404_addons" "${TMPDIR}/installed_addons" > "${TMPDIR}/final_404_addons" || true
 
-# Ask confirmation to uninstall the selected add-ons
 echo "
 ==== ADD-ONS CHECK ====
 Installed add-ons not available in final Odoo version:
 "
-cat final_404_addons
+cat "${TMPDIR}/final_404_addons"
 
 
 echo "
