@@ -29,38 +29,31 @@ if [[ $# -lt 4 ]]; then
     usage
 fi
 
-####################
-# GLOBAL VARIABLES #
-####################
+readonly ORIGIN_VERSION="$1"
+readonly FINAL_VERSION="$2"
+readonly ORIGIN_DB_NAME="$3"
+readonly ORIGIN_SERVICE_NAME="$4"
 
-ORIGIN_VERSION="$1" # "12" for version 12.0
-FINAL_VERSION="$2" # "16" for version 16.0
-# Path to the database to migrate. Must be a .zip file with the following syntax: {DATABASE_NAME}.zip
-ORIGIN_DB_NAME="$3"
-ORIGIN_SERVICE_NAME="$4"
-
-# Get origin database name
-COPY_DB_NAME="ou${ORIGIN_VERSION}"
-# Define finale database name
+readonly COPY_DB_NAME="ou${ORIGIN_VERSION}"
 export FINALE_DB_NAME="ou${FINAL_VERSION}"
-# Define finale odoo service name
-FINALE_SERVICE_NAME="${FINALE_DB_NAME}"
+readonly FINALE_DB_NAME
+readonly FINALE_SERVICE_NAME="${FINALE_DB_NAME}"
 
-# Service postgres name (dynamically retrieved from running containers)
-POSTGRES_CONTAINERS=$(docker ps --format '{{.Names}}' | grep postgres)
-POSTGRES_COUNT=$(echo "$POSTGRES_CONTAINERS" | grep -c .)
+postgres_containers=$(docker ps --format '{{.Names}}' | grep postgres || true)
+postgres_count=$(echo "$postgres_containers" | grep -c . || echo 0)
 
-if [[ "$POSTGRES_COUNT" -eq 0 ]]; then
+if [[ "$postgres_count" -eq 0 ]]; then
     log_error "No running PostgreSQL container found. Please start a PostgreSQL container and try again."
     exit 1
-elif [[ "$POSTGRES_COUNT" -gt 1 ]]; then
+elif [[ "$postgres_count" -gt 1 ]]; then
     log_error "Multiple PostgreSQL containers found:"
-    echo "$POSTGRES_CONTAINERS" >&2
+    echo "$postgres_containers" >&2
     log_error "Please ensure only one PostgreSQL container is running."
     exit 1
 fi
 
-export POSTGRES_SERVICE_NAME="$POSTGRES_CONTAINERS"
+export POSTGRES_SERVICE_NAME="$postgres_containers"
+readonly POSTGRES_SERVICE_NAME
 
 log_step "INPUT PARAMETERS"
 log_info "Origin version .......... $ORIGIN_VERSION"
@@ -78,19 +71,19 @@ log_info "Postgres service name .... $POSTGRES_SERVICE_NAME"
 
 log_step "CHECKS ALL NEEDED COMPONENTS ARE AVAILABLE"
 
-DB_EXISTS=$(docker exec -it -u 70 "$POSTGRES_SERVICE_NAME" psql -tc "SELECT 1 FROM pg_database WHERE datname = '$ORIGIN_DB_NAME'" | tr -d '[:space:]')
-if [[ "$DB_EXISTS" ]]; then
+db_exists=$(docker exec -it -u 70 "$POSTGRES_SERVICE_NAME" psql -tc "SELECT 1 FROM pg_database WHERE datname = '$ORIGIN_DB_NAME'" | tr -d '[:space:]')
+if [[ "$db_exists" ]]; then
     log_info "Database '$ORIGIN_DB_NAME' found."
 else
     log_error "Database '$ORIGIN_DB_NAME' not found in the local postgres service. Please add it and restart the upgrade process."
     exit 1
 fi
 
-REPERTOIRE="${DATASTORE_PATH}/${ORIGIN_SERVICE_NAME}/${FILESTORE_SUBPATH}/${ORIGIN_DB_NAME}"
-if [[ -d "$REPERTOIRE" ]]; then
-    log_info "Filestore '$REPERTOIRE' found."
+filestore_path="${DATASTORE_PATH}/${ORIGIN_SERVICE_NAME}/${FILESTORE_SUBPATH}/${ORIGIN_DB_NAME}"
+if [[ -d "$filestore_path" ]]; then
+    log_info "Filestore '$filestore_path' found."
 else
-    log_error "Filestore '$REPERTOIRE' not found, please add it and restart the upgrade process."
+    log_error "Filestore '$filestore_path' not found, please add it and restart the upgrade process."
     exit 1
 fi
 
