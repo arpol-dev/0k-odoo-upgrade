@@ -111,12 +111,7 @@ log_info "Original filestore copied."
 
 log_step "PATH OF MIGRATION"
 
-declare -a versions
-nb_migrations=$((FINAL_VERSION - ORIGIN_VERSION))
-
-for ((i = 0; i < nb_migrations; i++)); do
-    versions[i]=$((ORIGIN_VERSION + 1 + i))
-done
+readarray -t versions < <(seq $((ORIGIN_VERSION + 1)) "$FINAL_VERSION")
 log_info "Migration path is ${versions[*]}"
 
 
