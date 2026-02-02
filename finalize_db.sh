@@ -28,6 +28,16 @@ EOF
 )
 query_postgres_container "$FINALE_SQL_2" "$DB_NAME" || exit 1
 
+# Purge QWeb cache from compiled assets
+FINALE_SQL_3=$(cat <<'EOF'
+DELETE FROM ir_attachment
+WHERE name LIKE '/web/assets/%'
+   OR name LIKE '%.assets_%'
+   OR (res_model = 'ir.ui.view' AND mimetype = 'text/css');
+EOF
+)
+query_postgres_container "$FINALE_SQL_3" "$DB_NAME" || exit 1
+
 # Uninstall obsolette add-ons
 PYTHON_SCRIPT=post_migration_cleanup_obsolete_modules.py
 echo "Uninstall obsolete add-ons with script $PYTHON_SCRIPT ..."
