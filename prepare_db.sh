@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 # Global variables
 ODOO_SERVICE="$1"

@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 DB_NAME="$1"
 ODOO_SERVICE="$2"

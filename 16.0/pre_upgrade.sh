@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 echo "Prepare migration to 16.0..."
 

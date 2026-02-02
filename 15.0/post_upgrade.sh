@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 echo "Post migration to 15.0..."
 
