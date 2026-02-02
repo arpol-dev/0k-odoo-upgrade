@@ -2,6 +2,31 @@
 set -euo pipefail
 
 ####################
+# USAGE & ARGUMENTS
+####################
+
+usage() {
+    cat <<EOF >&2
+Usage: $0 <origin_version> <final_version> <db_name> <service_name>
+
+Arguments:
+    origin_version   Origin Odoo version number (e.g., 12 for version 12.0)
+    final_version    Target Odoo version number (e.g., 16 for version 16.0)
+    db_name          Name of the database to migrate
+    service_name     Name of the origin Odoo service (docker compose service)
+
+Example:
+    $0 14 16 elabore_20241208 odoo14
+EOF
+    exit 1
+}
+
+if [[ $# -lt 4 ]]; then
+    echo "ERROR: Missing arguments. Expected 4, got $#." >&2
+    usage
+fi
+
+####################
 # GLOBAL VARIABLES #
 ####################
 
