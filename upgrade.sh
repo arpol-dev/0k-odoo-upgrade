@@ -117,7 +117,7 @@ log_info "Migration path is ${versions[*]}"
 
 log_step "DATABASE PREPARATION"
 
-./prepare_db.sh "$COPY_DB_NAME" "$COPY_DB_NAME" "$FINALE_DB_MODEL_NAME" "$FINALE_SERVICE_NAME"
+./prepare_db.sh "$COPY_DB_NAME" "$COPY_DB_NAME" "$FINALE_DB_NAME" "$FINALE_SERVICE_NAME"
 
 
 log_step "UPGRADE PROCESS"
