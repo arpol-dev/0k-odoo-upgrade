@@ -12,7 +12,7 @@ echo "Start database preparation"
 # Check POSTGRES container is running
 if ! docker ps | grep -q "$DB_CONTAINER_NAME"; then
     printf "Docker container %s is not running.\n" "$DB_CONTAINER_NAME" >&2
-    return 1
+    exit 1
 fi
 
 EXT_EXISTS=$(query_postgres_container "SELECT 1 FROM pg_extension WHERE extname = 'dblink'" "$DB_NAME") || exit 1
