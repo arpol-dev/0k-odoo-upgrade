@@ -29,6 +29,8 @@ if [[ $# -lt 4 ]]; then
     usage
 fi
 
+check_required_commands
+
 readonly ORIGIN_VERSION="$1"
 readonly FINAL_VERSION="$2"
 readonly ORIGIN_DB_NAME="$3"

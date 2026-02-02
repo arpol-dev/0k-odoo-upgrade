@@ -9,6 +9,20 @@ set -euo pipefail
 readonly DATASTORE_PATH="/srv/datastore/data"
 readonly FILESTORE_SUBPATH="var/lib/odoo/filestore"
 
+check_required_commands() {
+    local missing=()
+    for cmd in docker compose sudo; do
+        if ! command -v "$cmd" &>/dev/null; then
+            missing+=("$cmd")
+        fi
+    done
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        log_error "Required commands not found: ${missing[*]}"
+        log_error "Please install them before running this script."
+        exit 1
+    fi
+}
+
 log_info()  { printf "[INFO]  %s\n" "$*"; }
 log_warn()  { printf "[WARN]  %s\n" "$*" >&2; }
 log_error() { printf "[ERROR] %s\n" "$*" >&2; }
@@ -64,4 +78,5 @@ exec_python_script_in_odoo_shell() {
 
 export DATASTORE_PATH FILESTORE_SUBPATH
 export -f log_info log_warn log_error log_step
+export -f check_required_commands
 export -f query_postgres_container copy_database copy_filestore exec_python_script_in_odoo_shell
