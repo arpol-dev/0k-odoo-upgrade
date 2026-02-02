@@ -16,7 +16,7 @@ if ! docker ps | grep -q "$DB_CONTAINER_NAME"; then
 fi
 
 EXT_EXISTS=$(query_postgres_container "SELECT 1 FROM pg_extension WHERE extname = 'dblink'" "$DB_NAME") || exit 1
-if [ "$EXT_EXISTS" != "1" ]; then
+if [[ "$EXT_EXISTS" != "1" ]]; then
     query_postgres_container "CREATE EXTENSION dblink;" "$DB_NAME" || exit 1
 fi
 

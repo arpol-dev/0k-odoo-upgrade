@@ -47,10 +47,10 @@ FINALE_SERVICE_NAME="${FINALE_DB_NAME}"
 POSTGRES_CONTAINERS=$(docker ps --format '{{.Names}}' | grep postgres)
 POSTGRES_COUNT=$(echo "$POSTGRES_CONTAINERS" | grep -c .)
 
-if [ "$POSTGRES_COUNT" -eq 0 ]; then
+if [[ "$POSTGRES_COUNT" -eq 0 ]]; then
     echo "ERROR: No running PostgreSQL container found. Please start a PostgreSQL container and try again." >&2
     exit 1
-elif [ "$POSTGRES_COUNT" -gt 1 ]; then
+elif [[ "$POSTGRES_COUNT" -gt 1 ]]; then
     echo "ERROR: Multiple PostgreSQL containers found:" >&2
     echo "$POSTGRES_CONTAINERS" >&2
     echo "Please ensure only one PostgreSQL container is running." >&2
@@ -82,7 +82,7 @@ echo "Postgres service name .... $POSTGRES_SERVICE_NAME"
 query_postgres_container(){
     local QUERY="$1"
     local DB_NAME="$2"
-    if [ -z "$QUERY" ]; then
+    if [[ -z "$QUERY" ]]; then
 	return 0
     fi
     local result
@@ -135,7 +135,7 @@ echo "
 
 # Check origin database is in the local postgres
 DB_EXISTS=$(docker exec -it -u 70 "$POSTGRES_SERVICE_NAME" psql -tc "SELECT 1 FROM pg_database WHERE datname = '$ORIGIN_DB_NAME'" | tr -d '[:space:]')
-if [ "$DB_EXISTS" ]; then
+if [[ "$DB_EXISTS" ]]; then
     echo "UPGRADE: Database '$ORIGIN_DB_NAME' found."
 else
     echo "ERROR: Database '$ORIGIN_DB_NAME' not found in the local postgress service. Please add it and restart the upgrade process."
@@ -144,7 +144,7 @@ fi
 
 # Check that the origin filestore exist
 REPERTOIRE="/srv/datastore/data/${ORIGIN_SERVICE_NAME}/var/lib/odoo/filestore/${ORIGIN_DB_NAME}"
-if [ -d "$REPERTOIRE" ]; then
+if [[ -d "$REPERTOIRE" ]]; then
     echo "UPGRADE: '$REPERTOIRE' filestore found."
 else
     echo "ERROR: '$REPERTOIRE' filestore not found, please add it and restart the upgrade process."
