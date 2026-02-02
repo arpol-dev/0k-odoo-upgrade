@@ -16,6 +16,18 @@ PYTHON_SCRIPT=post_migration_fix_duplicated_views.py
 echo "Remove duplicated views with script $PYTHON_SCRIPT ..."
 exec_python_script_in_odoo_shell "$DB_NAME" "$DB_NAME" "$PYTHON_SCRIPT" || exit 1
 
+# Reset all website templates with custom content
+FINALE_SQL_2=$(cat <<'EOF'
+UPDATE ir_ui_view
+SET arch_db = NULL
+WHERE arch_fs IS NOT NULL
+  AND arch_fs LIKE 'website/%'
+  AND arch_db IS NOT NULL
+  AND id NOT IN (SELECT view_id FROM website_page);
+EOF
+)
+query_postgres_container "$FINALE_SQL_2" "$DB_NAME" || exit 1
+
 # Uninstall obsolette add-ons
 PYTHON_SCRIPT=post_migration_cleanup_obsolete_modules.py
 echo "Uninstall obsolete add-ons with script $PYTHON_SCRIPT ..."
