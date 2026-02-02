@@ -4,42 +4,41 @@ set -euo pipefail
 DB_NAME="$1"
 ODOO_SERVICE="$2"
 
-FINALE_SQL=$(cat <<'EOF'
-/*Delete sequences that prevent Odoo to start*/
-drop sequence base_registry_signaling;
-drop sequence base_cache_signaling;
-EOF
-)
-query_postgres_container "$FINALE_SQL" "$DB_NAME" || exit 1
+echo "Running SQL cleanup..."
+CLEANUP_SQL=$(cat <<'EOF'
+-- Drop sequences that prevent Odoo from starting.
+-- These sequences are recreated by Odoo on startup but stale values
+-- from the old version can cause conflicts.
+DROP SEQUENCE IF EXISTS base_registry_signaling;
+DROP SEQUENCE IF EXISTS base_cache_signaling;
 
-# Fix duplicated views
-PYTHON_SCRIPT=post_migration_fix_duplicated_views.py
-echo "Remove duplicated views with script $PYTHON_SCRIPT ..."
-exec_python_script_in_odoo_shell "$DB_NAME" "$DB_NAME" "$PYTHON_SCRIPT" || exit 1
-
-# Reset all website templates with custom content
-FINALE_SQL_2=$(cat <<'EOF'
+-- Reset website templates to their original state.
+-- Views with arch_fs (file source) that have been customized (arch_db not null)
+-- are reset to use the file version, EXCEPT for actual website pages which
+-- contain user content that must be preserved.
 UPDATE ir_ui_view
 SET arch_db = NULL
 WHERE arch_fs IS NOT NULL
   AND arch_fs LIKE 'website/%'
   AND arch_db IS NOT NULL
   AND id NOT IN (SELECT view_id FROM website_page);
-EOF
-)
-query_postgres_container "$FINALE_SQL_2" "$DB_NAME" || exit 1
 
-# Purge QWeb cache from compiled assets
-FINALE_SQL_3=$(cat <<'EOF'
+-- Purge compiled frontend assets (CSS/JS bundles).
+-- These cached files reference old asset versions and must be regenerated
+-- by Odoo after migration to avoid broken stylesheets and scripts.
 DELETE FROM ir_attachment
 WHERE name LIKE '/web/assets/%'
    OR name LIKE '%.assets_%'
    OR (res_model = 'ir.ui.view' AND mimetype = 'text/css');
 EOF
 )
-query_postgres_container "$FINALE_SQL_3" "$DB_NAME" || exit 1
+query_postgres_container "$CLEANUP_SQL" "$DB_NAME"
 
-# Uninstall obsolette add-ons
+PYTHON_SCRIPT=post_migration_fix_duplicated_views.py
+echo "Remove duplicated views with script $PYTHON_SCRIPT ..."
+exec_python_script_in_odoo_shell "$DB_NAME" "$DB_NAME" "$PYTHON_SCRIPT"
+
+# Uninstall obsolete add-ons
 PYTHON_SCRIPT=post_migration_cleanup_obsolete_modules.py
 echo "Uninstall obsolete add-ons with script $PYTHON_SCRIPT ..."
 exec_python_script_in_odoo_shell "$DB_NAME" "$DB_NAME" "$PYTHON_SCRIPT" || exit 1
