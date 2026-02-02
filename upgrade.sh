@@ -117,7 +117,7 @@ log_info "Migration path is ${versions[*]}"
 
 log_step "DATABASE PREPARATION"
 
-./prepare_db.sh "$COPY_DB_NAME" "$COPY_DB_NAME" "$FINALE_DB_NAME" "$FINALE_SERVICE_NAME"
+"${SCRIPT_DIR}/scripts/prepare_db.sh" "$COPY_DB_NAME" "$COPY_DB_NAME" "$FINALE_DB_NAME" "$FINALE_SERVICE_NAME"
 
 
 log_step "UPGRADE PROCESS"
@@ -125,15 +125,15 @@ log_step "UPGRADE PROCESS"
 for version in "${versions[@]}"; do
     log_info "START UPGRADE TO ${version}.0"
 
-    "${SCRIPT_DIR}/${version}.0/pre_upgrade.sh"
-    "${SCRIPT_DIR}/${version}.0/upgrade.sh"
-    "${SCRIPT_DIR}/${version}.0/post_upgrade.sh"
+    "${SCRIPT_DIR}/versions/${version}.0/pre_upgrade.sh"
+    "${SCRIPT_DIR}/versions/${version}.0/upgrade.sh"
+    "${SCRIPT_DIR}/versions/${version}.0/post_upgrade.sh"
 
     log_info "END UPGRADE TO ${version}.0"
 done
 
 log_step "POST-UPGRADE PROCESSES"
 
-./finalize_db.sh "$FINALE_DB_NAME" "$FINALE_SERVICE_NAME"
+"${SCRIPT_DIR}/scripts/finalize_db.sh" "$FINALE_DB_NAME" "$FINALE_SERVICE_NAME"
 
 log_step "UPGRADE PROCESS ENDED WITH SUCCESS"

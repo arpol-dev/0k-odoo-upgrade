@@ -34,14 +34,15 @@ EOF
 )
 query_postgres_container "$CLEANUP_SQL" "$DB_NAME"
 
-PYTHON_SCRIPT=post_migration_fix_duplicated_views.py
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+PYTHON_SCRIPT="${SCRIPT_DIR}/lib/python/fix_duplicated_views.py"
 echo "Remove duplicated views with script $PYTHON_SCRIPT ..."
 exec_python_script_in_odoo_shell "$DB_NAME" "$DB_NAME" "$PYTHON_SCRIPT"
 
-# Uninstall obsolete add-ons
-PYTHON_SCRIPT=post_migration_cleanup_obsolete_modules.py
+PYTHON_SCRIPT="${SCRIPT_DIR}/lib/python/cleanup_modules.py"
 echo "Uninstall obsolete add-ons with script $PYTHON_SCRIPT ..."
-exec_python_script_in_odoo_shell "$DB_NAME" "$DB_NAME" "$PYTHON_SCRIPT" || exit 1
+exec_python_script_in_odoo_shell "$DB_NAME" "$DB_NAME" "$PYTHON_SCRIPT"
 
 # Give back the right to user to access to the tables
 # docker exec -u 70 "$DB_CONTAINER_NAME" pgm chown "$FINALE_SERVICE_NAME" "$DB_NAME"

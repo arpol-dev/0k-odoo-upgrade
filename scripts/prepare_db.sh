@@ -64,7 +64,8 @@ echo "Installed add-ons not available in final Odoo version:"
 echo "$missing_addons"
 confirm_or_exit "Do you accept to migrate with these add-ons still installed?"
 
-PYTHON_SCRIPT=pre_migration_view_checking.py
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PYTHON_SCRIPT="${SCRIPT_DIR}/lib/python/check_views.py"
 echo "Check views with script $PYTHON_SCRIPT ..."
 exec_python_script_in_odoo_shell "$DB_NAME" "$DB_NAME" "$PYTHON_SCRIPT"
 
