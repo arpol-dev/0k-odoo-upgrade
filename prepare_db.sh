@@ -42,7 +42,7 @@ echo "Base neutralized..."
 ## List add-ons not in final version ##
 #######################################
 
-SQL_404_ADDONS_LIST=$(cat <<EOF
+SQL_MISSING_ADDONS=$(cat <<EOF
 SELECT module_origin.name
 FROM ir_module_module module_origin
 LEFT JOIN (
@@ -56,20 +56,14 @@ WHERE (module_dest.name IS NULL)
 ORDER BY module_origin.name;
 EOF
 )
-echo "Retrieve 404 addons... "
-echo "SQL REQUEST = $SQL_404_ADDONS_LIST"
-query_postgres_container "$SQL_404_ADDONS_LIST" "$DB_NAME" > "${TMPDIR}/404_addons"
-
-INSTALLED_ADDONS="SELECT name FROM ir_module_module WHERE state='installed';"
-query_postgres_container "$INSTALLED_ADDONS" "$DB_NAME" > "${TMPDIR}/installed_addons"
-
-grep -Fx -f "${TMPDIR}/404_addons" "${TMPDIR}/installed_addons" > "${TMPDIR}/final_404_addons" || true
+echo "Retrieve missing addons..."
+missing_addons=$(query_postgres_container "$SQL_MISSING_ADDONS" "$DB_NAME")
 
 echo "
 ==== ADD-ONS CHECK ====
 Installed add-ons not available in final Odoo version:
 "
-cat "${TMPDIR}/final_404_addons"
+echo "$missing_addons"
 
 
 echo "
