@@ -134,7 +134,7 @@ echo "
 ==== CHECKS ALL NEEDED COMPONENTS ARE AVAILABLE ===="
 
 # Check origin database is in the local postgres
-DB_EXISTS=$(docker exec -it -u 70 $POSTGRES_SERVICE_NAME psql -tc "SELECT 1 FROM pg_database WHERE datname = '$ORIGIN_DB_NAME'" | tr -d '[:space:]')
+DB_EXISTS=$(docker exec -it -u 70 "$POSTGRES_SERVICE_NAME" psql -tc "SELECT 1 FROM pg_database WHERE datname = '$ORIGIN_DB_NAME'" | tr -d '[:space:]')
 if [ "$DB_EXISTS" ]; then
     echo "UPGRADE: Database '$ORIGIN_DB_NAME' found."
 else
@@ -144,7 +144,7 @@ fi
 
 # Check that the origin filestore exist
 REPERTOIRE="/srv/datastore/data/${ORIGIN_SERVICE_NAME}/var/lib/odoo/filestore/${ORIGIN_DB_NAME}"
-if [ -d $REPERTOIRE ]; then
+if [ -d "$REPERTOIRE" ]; then
     echo "UPGRADE: '$REPERTOIRE' filestore found."
 else
     echo "ERROR: '$REPERTOIRE' filestore not found, please add it and restart the upgrade process."
@@ -190,12 +190,11 @@ echo "
 ==== PATH OF MIGRATION ===="
 # List all the versions to migrate through
 declare -a versions
-nb_migrations=$(($FINAL_VERSION - $ORIGIN_VERSION))
+nb_migrations=$((FINAL_VERSION - ORIGIN_VERSION))
 
 # Build the migration path
-for ((i = 0; i<$nb_migrations; i++))
-do
-    versions[$i]=$(($ORIGIN_VERSION + 1 + i))
+for ((i = 0; i < nb_migrations; i++)); do
+    versions[i]=$((ORIGIN_VERSION + 1 + i))
 done
 echo "UPGRADE: Migration path is ${versions[@]}"
 
