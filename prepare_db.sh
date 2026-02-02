@@ -10,8 +10,8 @@ DB_FINALE_SERVICE="$4"
 echo "Start database preparation"
 
 # Check POSTGRES container is running
-if ! docker ps | grep -q "$DB_CONTAINER_NAME"; then
-    printf "Docker container %s is not running.\n" "$DB_CONTAINER_NAME" >&2
+if ! docker ps | grep -q "$POSTGRES_SERVICE_NAME"; then
+    printf "Docker container %s is not running.\n" "$POSTGRES_SERVICE_NAME" >&2
     exit 1
 fi
 
