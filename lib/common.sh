@@ -9,6 +9,11 @@ set -euo pipefail
 readonly DATASTORE_PATH="/srv/datastore/data"
 readonly FILESTORE_SUBPATH="var/lib/odoo/filestore"
 
+log_info()  { printf "[INFO]  %s\n" "$*"; }
+log_warn()  { printf "[WARN]  %s\n" "$*" >&2; }
+log_error() { printf "[ERROR] %s\n" "$*" >&2; }
+log_step()  { printf "\n===== %s =====\n" "$*"; }
+
 query_postgres_container() {
     local query="$1"
     local db_name="$2"
@@ -58,4 +63,5 @@ exec_python_script_in_odoo_shell() {
 }
 
 export DATASTORE_PATH FILESTORE_SUBPATH
+export -f log_info log_warn log_error log_step
 export -f query_postgres_container copy_database copy_filestore exec_python_script_in_odoo_shell
