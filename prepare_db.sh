@@ -59,45 +59,15 @@ EOF
 echo "Retrieve missing addons..."
 missing_addons=$(query_postgres_container "$SQL_MISSING_ADDONS" "$DB_NAME")
 
-echo "
-==== ADD-ONS CHECK ====
-Installed add-ons not available in final Odoo version:
-"
+log_step "ADD-ONS CHECK"
+echo "Installed add-ons not available in final Odoo version:"
 echo "$missing_addons"
+confirm_or_exit "Do you accept to migrate with these add-ons still installed?"
 
-
-echo "
-Do you accept to migrate the database with all these add-ons still installed? (Y/N/R)"
-echo "Y - Yes, let's go on with the upgrade."
-echo "N - No, stop the upgrade"
-read -n 1 -p "Your choice: " choice
-case "$choice" in
-    [Yy] ) echo "
-Let's go on!";;
-    [Nn] ) echo "
-Upgrade cancelled!"; exit 1;;
-    * ) echo "
-Please answer by Y or N.";;
-esac
-
-
-# Check the views
 PYTHON_SCRIPT=pre_migration_view_checking.py
 echo "Check views with script $PYTHON_SCRIPT ..."
-exec_python_script_in_odoo_shell "$DB_NAME" "$DB_NAME" "$PYTHON_SCRIPT" || exit 1
+exec_python_script_in_odoo_shell "$DB_NAME" "$DB_NAME" "$PYTHON_SCRIPT"
 
-echo "
-Do you accept to migrate the database with the current views states? (Y/N/R)"
-echo "Y - Yes, let's go on with the upgrade."
-echo "N - No, stop the upgrade"
-read -n 1 -p "Your choice: " choice
-case "$choice" in
-    [Yy] ) echo "
-Upgrade confirmed!";;
-    [Nn] ) echo "
-Upgrade cancelled!"; exit 1;;
-    * ) echo "
-Please answer by Y or N.";;
-esac
+confirm_or_exit "Do you accept to migrate with the current views state?"
 
 echo "Database successfully prepared!"

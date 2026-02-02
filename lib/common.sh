@@ -28,6 +28,21 @@ log_warn()  { printf "[WARN]  %s\n" "$*" >&2; }
 log_error() { printf "[ERROR] %s\n" "$*" >&2; }
 log_step()  { printf "\n===== %s =====\n" "$*"; }
 
+confirm_or_exit() {
+    local message="$1"
+    local choice
+    echo ""
+    echo "$message"
+    echo "Y - Yes, continue"
+    echo "N - No, cancel"
+    read -r -n 1 -p "Your choice: " choice
+    echo ""
+    case "$choice" in
+        [Yy]) return 0 ;;
+        *) log_error "Cancelled by user."; exit 1 ;;
+    esac
+}
+
 query_postgres_container() {
     local query="$1"
     local db_name="$2"
@@ -76,6 +91,6 @@ exec_python_script_in_odoo_shell() {
 }
 
 export DATASTORE_PATH FILESTORE_SUBPATH
-export -f log_info log_warn log_error log_step
+export -f log_info log_warn log_error log_step confirm_or_exit
 export -f check_required_commands
 export -f query_postgres_container copy_database copy_filestore exec_python_script_in_odoo_shell
