@@ -125,13 +125,10 @@ log_step "UPGRADE PROCESS"
 for version in "${versions[@]}"; do
     log_info "START UPGRADE TO ${version}.0"
 
-    cd "${version}.0"
+    "${SCRIPT_DIR}/${version}.0/pre_upgrade.sh"
+    "${SCRIPT_DIR}/${version}.0/upgrade.sh"
+    "${SCRIPT_DIR}/${version}.0/post_upgrade.sh"
 
-    ./pre_upgrade.sh
-    ./upgrade.sh
-    ./post_upgrade.sh
-
-    cd ..
     log_info "END UPGRADE TO ${version}.0"
 done
 
