@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/lib/common.sh"
+
 ####################
 # USAGE & ARGUMENTS
 ####################
@@ -77,54 +80,6 @@ echo "Finale service name ...... $FINALE_SERVICE_NAME"
 echo "Postgres service name .... $POSTGRES_SERVICE_NAME"
 
 
-
-# Function to launch an SQL request to the postgres container
-query_postgres_container(){
-    local QUERY="$1"
-    local DB_NAME="$2"
-    if [[ -z "$QUERY" ]]; then
-	return 0
-    fi
-    local result
-    if ! result=$(docker exec -u 70 "$POSTGRES_SERVICE_NAME" psql -d "$DB_NAME" -t -A -c "$QUERY"); then
-        printf "Failed to execute SQL query: %s\n" "$query" >&2
-        printf "Error: %s\n" "$result" >&2
-        exit 1
-    fi
-    echo "$result"
-}
-export -f query_postgres_container
-
-# Function to copy the postgres databases
-copy_database(){
-    local FROM_DB="$1"
-    local TO_SERVICE="$2"
-    local TO_DB="$3"
-    docker exec -u 70 "$POSTGRES_SERVICE_NAME" pgm cp -f "$FROM_DB" "$TO_DB"@"$TO_SERVICE"
-}
-export -f copy_database
-
-# Function to copy the filetores
-copy_filestore(){
-    local FROM_SERVICE="$1"
-    local FROM_DB="$2"
-    local TO_SERVICE="$3"
-    local TO_DB="$4"
-    sudo mkdir -p /srv/datastore/data/"$TO_SERVICE"/var/lib/odoo/filestore/"$TO_DB" || exit 1
-    sudo rm -rf /srv/datastore/data/"$TO_SERVICE"/var/lib/odoo/filestore/"$TO_DB" || exit 1
-    sudo cp -a /srv/datastore/data/"$FROM_SERVICE"/var/lib/odoo/filestore/"$FROM_DB" /srv/datastore/data/"$TO_SERVICE"/var/lib/odoo/filestore/"$TO_DB" || exit 1
-    echo "Filestore $FROM_SERVICE/$FROM_DB copied."
-}
-export -f copy_filestore
-
-# Function to launch python scripts in Odoo Shell
-exec_python_script_in_odoo_shell(){
-	local SERVICE_NAME="$1"
-	local DB_NAME="$2"
-	local PYTHON_SCRIPT="$3"
-	compose --debug run "$SERVICE_NAME" shell -d "$DB_NAME" --no-http --stop-after-init < "$PYTHON_SCRIPT"
-}
-export -f exec_python_script_in_odoo_shell
 
 ##############################################
 # CHECKS ALL NEEDED COMPONENTS ARE AVAILABLE #
