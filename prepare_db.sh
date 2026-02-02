@@ -40,20 +40,20 @@ echo "Base neutralized..."
 ## List add-ons not in final version ##
 #######################################
 
-# Retrieve add-ons not available on the final Odoo version
-SQL_404_ADDONS_LIST="
-	SELECT module_origin.name
-	FROM ir_module_module module_origin
-	LEFT   JOIN (
-	   SELECT *
-	   FROM   dblink('dbname=$FINALE_DB_NAME','SELECT name, shortdesc, author FROM ir_module_module')
-	   AS     tb2(name text, shortdesc text, author text)
-	) AS module_dest ON module_dest.name = module_origin.name
-
-	WHERE (module_dest.name IS NULL) AND (module_origin.state = 'installed') AND (module_origin.author NOT IN ('Odoo S.A.', 'Lokavaluto', 'Elabore'))
-	ORDER BY module_origin.name
-;
-"
+SQL_404_ADDONS_LIST=$(cat <<EOF
+SELECT module_origin.name
+FROM ir_module_module module_origin
+LEFT JOIN (
+    SELECT *
+    FROM dblink('dbname=${FINALE_DB_NAME}','SELECT name, shortdesc, author FROM ir_module_module')
+    AS tb2(name text, shortdesc text, author text)
+) AS module_dest ON module_dest.name = module_origin.name
+WHERE (module_dest.name IS NULL)
+  AND (module_origin.state = 'installed')
+  AND (module_origin.author NOT IN ('Odoo S.A.', 'Lokavaluto', 'Elabore'))
+ORDER BY module_origin.name;
+EOF
+)
 echo "Retrieve 404 addons... "
 echo "SQL REQUEST = $SQL_404_ADDONS_LIST"
 query_postgres_container "$SQL_404_ADDONS_LIST" "$DB_NAME" > 404_addons || exit 1
