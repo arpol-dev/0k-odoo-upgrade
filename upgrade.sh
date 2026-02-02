@@ -41,20 +41,19 @@ export FINALE_DB_NAME="ou${FINAL_VERSION}"
 readonly FINALE_DB_NAME
 readonly FINALE_SERVICE_NAME="${FINALE_DB_NAME}"
 
-postgres_containers=$(docker ps --format '{{.Names}}' | grep postgres || true)
-postgres_count=$(echo "$postgres_containers" | grep -c . || echo 0)
+readarray -t postgres_containers < <(docker ps --format '{{.Names}}' | grep postgres || true)
 
-if [[ "$postgres_count" -eq 0 ]]; then
+if [[ ${#postgres_containers[@]} -eq 0 ]]; then
     log_error "No running PostgreSQL container found. Please start a PostgreSQL container and try again."
     exit 1
-elif [[ "$postgres_count" -gt 1 ]]; then
+elif [[ ${#postgres_containers[@]} -gt 1 ]]; then
     log_error "Multiple PostgreSQL containers found:"
-    echo "$postgres_containers" >&2
+    printf '  %s\n' "${postgres_containers[@]}" >&2
     log_error "Please ensure only one PostgreSQL container is running."
     exit 1
 fi
 
-export POSTGRES_SERVICE_NAME="$postgres_containers"
+export POSTGRES_SERVICE_NAME="${postgres_containers[0]}"
 readonly POSTGRES_SERVICE_NAME
 
 log_step "INPUT PARAMETERS"
