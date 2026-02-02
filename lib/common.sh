@@ -11,7 +11,7 @@ readonly FILESTORE_SUBPATH="var/lib/odoo/filestore"
 
 check_required_commands() {
     local missing=()
-    for cmd in docker compose sudo; do
+    for cmd in docker compose sudo rsync; do
         if ! command -v "$cmd" &>/dev/null; then
             missing+=("$cmd")
         fi
@@ -62,9 +62,8 @@ copy_filestore() {
     local src_path="${DATASTORE_PATH}/${from_service}/${FILESTORE_SUBPATH}/${from_db}"
     local dst_path="${DATASTORE_PATH}/${to_service}/${FILESTORE_SUBPATH}/${to_db}"
 
-    sudo mkdir -p "$dst_path"
-    sudo rm -rf "$dst_path"
-    sudo cp -a "$src_path" "$dst_path"
+    sudo mkdir -p "$(dirname "$dst_path")"
+    sudo rsync -a --delete "${src_path}/" "${dst_path}/"
     echo "Filestore ${from_service}/${from_db} copied to ${to_service}/${to_db}."
 }
 
