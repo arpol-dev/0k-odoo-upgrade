@@ -52,7 +52,7 @@ LEFT JOIN (
 ) AS module_dest ON module_dest.name = module_origin.name
 WHERE (module_dest.name IS NULL)
   AND (module_origin.state = 'installed')
-  AND (module_origin.author NOT IN ('Odoo S.A.', 'Lokavaluto', 'Elabore'))
+  AND (module_origin.author NOT IN ('Odoo S.A.'))
 ORDER BY module_origin.name;
 EOF
 )
