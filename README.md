@@ -38,13 +38,15 @@ cd 0k-odoo-upgrade
 ├── lib/
 │   ├── common.sh              # Shared bash functions
 │   └── python/                # Python utility scripts
-│       ├── check_views.py     # View verification (pre-migration)
-│       ├── fix_duplicated_views.py   # Fix duplicated views
-│       └── cleanup_modules.py # Obsolete module cleanup
+│       ├── check_views.py           # View analysis (pre-migration)
+│       ├── validate_views.py        # View validation (post-migration)
+│       ├── fix_duplicated_views.py  # Fix duplicated views
+│       └── cleanup_modules.py       # Obsolete module cleanup
 │
 ├── scripts/
 │   ├── prepare_db.sh          # Database preparation before migration
-│   └── finalize_db.sh         # Post-migration finalization
+│   ├── finalize_db.sh         # Post-migration finalization
+│   └── validate_migration.sh  # Manual post-migration validation
 │
 └── versions/                  # Version-specific scripts
     ├── 13.0/
@@ -188,9 +190,11 @@ The script will prompt for confirmation at two points:
 
 1. **Review logs** to detect any non-blocking errors
 
-2. **Test the migrated database** locally
+2. **Validate the migration** (see [Post-Migration Validation](#post-migration-validation))
 
-3. **Deploy to production**
+3. **Test the migrated database** locally
+
+4. **Deploy to production**
    ```bash
    # Export the migrated database
    vps odoo dump db_migrated.zip
@@ -198,6 +202,42 @@ The script will prompt for confirmation at two points:
    # On the production server
    vps odoo restore db_migrated.zip
    ```
+
+## Post-Migration Validation
+
+After migration, use the validation script to check for broken views and XPath errors.
+
+### Quick Start
+
+```bash
+./scripts/validate_migration.sh ou17 odoo17
+```
+
+### What Gets Validated
+
+Runs in Odoo shell, no HTTP server needed:
+
+| Check | Description |
+|-------|-------------|
+| **Inherited views** | Verifies all inherited views can combine with their parent |
+| **XPath targets** | Ensures XPath expressions find their targets in parent views |
+| **QWeb templates** | Validates QWeb templates are syntactically correct |
+| **Field references** | Checks that field references point to existing model fields |
+| **Odoo native** | Runs Odoo's built-in `_validate_custom_views()` |
+
+### Running Directly
+
+You can also run the Python script directly in Odoo shell:
+
+```bash
+compose run odoo17 shell -d ou17 --no-http --stop-after-init < lib/python/validate_views.py
+```
+
+### Output
+
+- **Colored terminal output** with `[OK]`, `[ERROR]`, `[WARN]` indicators
+- **JSON report** written to `/tmp/validation_views_<db>_<timestamp>.json`
+- **Exit code**: `0` = success, `1` = errors found
 
 ## Customization
 

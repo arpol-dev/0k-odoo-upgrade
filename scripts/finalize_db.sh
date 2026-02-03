@@ -50,3 +50,11 @@ exec_python_script_in_odoo_shell "$DB_NAME" "$DB_NAME" "$PYTHON_SCRIPT"
 
 # Launch Odoo with database in finale version to run all updates
 run_compose --debug run "$ODOO_SERVICE" -u all --log-level=debug --stop-after-init --no-http
+
+echo ""
+echo "Running post-migration view validation..."
+if exec_python_script_in_odoo_shell "$DB_NAME" "$DB_NAME" "${SCRIPT_DIR}/lib/python/validate_views.py"; then
+    echo "View validation passed."
+else
+    echo "WARNING: View validation found issues. Run scripts/validate_migration.sh for the full report."
+fi
