@@ -96,7 +96,7 @@ if docker exec -u 70 "$POSTGRES_SERVICE_NAME" pgm ls | grep -q "$FINALE_SERVICE_
     sudo rm -rf "${DATASTORE_PATH}/${FINALE_SERVICE_NAME}/${FILESTORE_SUBPATH}/${FINALE_SERVICE_NAME}"
 fi
 
-compose --debug run "$FINALE_SERVICE_NAME" -i base --stop-after-init --no-http
+run_compose --debug run "$FINALE_SERVICE_NAME" -i base --stop-after-init --no-http
 
 log_info "Model database in final Odoo version created."
 

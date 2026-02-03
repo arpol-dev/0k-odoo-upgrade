@@ -6,6 +6,9 @@
 
 set -euo pipefail
 
+# Get the absolute path of the project root (parent of lib/)
+readonly PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
 readonly DATASTORE_PATH="/srv/datastore/data"
 readonly FILESTORE_SUBPATH="var/lib/odoo/filestore"
 
@@ -82,15 +85,22 @@ copy_filestore() {
     echo "Filestore ${from_service}/${from_db} copied to ${to_service}/${to_db}."
 }
 
+# Workaround: 0k dev-pack's compose script doesn't handle absolute paths correctly.
+# It passes HOST_COMPOSE_YML_FILE to the container, which tries to open it directly
+# instead of using the mounted path. Using a relative path from PROJECT_ROOT avoids this.
+run_compose() {
+    (cd "$PROJECT_ROOT" && compose -f ./config/compose.yml "$@")
+}
+
 exec_python_script_in_odoo_shell() {
     local service_name="$1"
     local db_name="$2"
     local python_script="$3"
 
-    compose --debug run "$service_name" shell -d "$db_name" --no-http --stop-after-init < "$python_script"
+    run_compose --debug run "$service_name" shell -d "$db_name" --no-http --stop-after-init < "$python_script"
 }
 
-export DATASTORE_PATH FILESTORE_SUBPATH
+export PROJECT_ROOT DATASTORE_PATH FILESTORE_SUBPATH
 export -f log_info log_warn log_error log_step confirm_or_exit
 export -f check_required_commands
-export -f query_postgres_container copy_database copy_filestore exec_python_script_in_odoo_shell
+export -f query_postgres_container copy_database copy_filestore run_compose exec_python_script_in_odoo_shell
