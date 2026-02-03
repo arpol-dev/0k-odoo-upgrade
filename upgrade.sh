@@ -90,7 +90,7 @@ fi
 
 log_step "LAUNCH VIRGIN ODOO IN FINAL VERSION"
 
-if docker exec -u 70 "$POSTGRES_SERVICE_NAME" pgm ls | grep -q "$FINALE_SERVICE_NAME"; then
+if docker exec -u 70 "$POSTGRES_SERVICE_NAME" pgm ls | grep "$FINALE_SERVICE_NAME"; then
     log_info "Removing existing finale database and filestore..."
     docker exec -u 70 "$POSTGRES_SERVICE_NAME" pgm rm -f "$FINALE_SERVICE_NAME"
     sudo rm -rf "${DATASTORE_PATH}/${FINALE_SERVICE_NAME}/${FILESTORE_SUBPATH}/${FINALE_SERVICE_NAME}"
