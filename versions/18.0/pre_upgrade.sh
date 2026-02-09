@@ -95,6 +95,32 @@ EOF
 else
     echo "Module account_payment_mode not installed, skipping bank-payment migration."
 fi
+
+# ============================================================================
+# FIX: Rename company-dependent columns before OpenUpgrade runs
+# In Odoo 18, company-dependent fields are stored as JSONB columns.
+# The ORM's _auto_init() tries to convert existing VARCHAR columns to JSONB,
+# which fails if the data is not valid JSON.
+# Solution: Rename the columns so Odoo creates new JSONB columns, then
+# OpenUpgrade's convert_company_dependent() will migrate the data from ir.property.
+#
+# See: https://github.com/OCA/OpenUpgrade/issues/5449
+# ============================================================================
+COMPANY_DEPENDENT_FIX_SQL=$(cat <<'EOF'
+DO $$
+BEGIN
+    -- res.partner.barcode (base module)
+    IF EXISTS (SELECT 1 FROM information_schema.columns
+               WHERE table_name = 'res_partner' AND column_name = 'barcode') THEN
+        ALTER TABLE res_partner RENAME COLUMN barcode TO openupgrade_legacy_18_0_barcode;
+        RAISE NOTICE 'Renamed res_partner.barcode for company-dependent conversion';
+    END IF;
+END $$;
+EOF
+)
+echo "Fixing company-dependent columns for Odoo 18..."
+query_postgres_container "$COMPANY_DEPENDENT_FIX_SQL" ou18 || exit 1
+
 EOF
 )
 
