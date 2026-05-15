@@ -1,0 +1,10 @@
+# Modules that became obsolete in version 13.0
+obsolete: []
+
+# Modules merged into Odoo Core in version 13.0
+merged_in_core: []
+
+# Modules renamed in version 13.0
+renamed: []
+#  - old: old_name
+#    new: new_name

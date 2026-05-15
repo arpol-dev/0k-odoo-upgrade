@@ -14,7 +14,7 @@ readonly FILESTORE_SUBPATH="var/lib/odoo/filestore"
 
 check_required_commands() {
     local missing=()
-    for cmd in docker compose sudo rsync; do
+    for cmd in docker compose sudo rsync yq; do
         if ! command -v "$cmd" &>/dev/null; then
             missing+=("$cmd")
         fi
@@ -100,7 +100,83 @@ exec_python_script_in_odoo_shell() {
     run_compose --debug run "$service_name" shell -d "$db_name" --no-http --stop-after-init < "$python_script"
 }
 
+# Classifies missing modules into 4 categories based on the known_changes.yaml
+# files from each traversed version (from ORIGIN_VERSION+1 to FINAL_VERSION).
+# The following global arrays are populated:
+#   addons_obsolete      : modules that became obsolete
+#   addons_core          : modules merged into Odoo Core
+#   addons_renamed       : renamed modules (format "old_name -> new_name")
+#   addons_truly_missing : modules that are genuinely missing
+#
+# Prerequisites: ORIGIN_VERSION and FINAL_VERSION must be exported.
+classify_missing_addons() {
+    local missing_addons_raw="$1"
+
+    addons_obsolete=()
+    addons_core=()
+    addons_renamed=()
+    addons_truly_missing=()
+
+    # Convert the string into an array (one entry per line)
+    local -a missing=()
+    while IFS= read -r line; do
+        [[ -n "$line" ]] && missing+=("$line")
+    done <<< "$missing_addons_raw"
+
+    if [[ ${#missing[@]} -eq 0 ]]; then
+        return 0
+    fi
+
+    # Build lookup tables from all known_changes.yaml files in traversed versions
+    local -A known_obsolete=()
+    local -A known_core=()
+    local -A known_renamed=()
+
+    local versions_path="${PROJECT_ROOT}/versions"
+    local v
+    for v in $(seq $((ORIGIN_VERSION + 1)) "$FINAL_VERSION"); do
+        local yaml_file="${versions_path}/${v}.0/known_changes.yaml"
+        [[ -f "$yaml_file" ]] || continue
+
+        local mod
+        while IFS= read -r mod; do
+            [[ -n "$mod" && "$mod" != "null" ]] && known_obsolete["$mod"]=1
+        done < <(yq '.obsolete[]?' "$yaml_file" 2>/dev/null)
+
+        while IFS= read -r mod; do
+            [[ -n "$mod" && "$mod" != "null" ]] && known_core["$mod"]=1
+        done < <(yq '.merged_in_core[]?' "$yaml_file" 2>/dev/null)
+
+        local count
+        count=$(yq '.renamed | length' "$yaml_file" 2>/dev/null)
+        if [[ "$count" =~ ^[0-9]+$ && "$count" -gt 0 ]]; then
+            local i
+            for ((i = 0; i < count; i++)); do
+                local old new
+                old=$(yq ".renamed[$i].old" "$yaml_file" 2>/dev/null)
+                new=$(yq ".renamed[$i].new" "$yaml_file" 2>/dev/null)
+                [[ -n "$old" && "$old" != "null" ]] && known_renamed["$old"]="$new"
+            done
+        fi
+    done
+
+    # Classify each missing module
+    local mod
+    for mod in "${missing[@]}"; do
+        if [[ -n "${known_obsolete[$mod]:-}" ]]; then
+            addons_obsolete+=("$mod")
+        elif [[ -n "${known_core[$mod]:-}" ]]; then
+            addons_core+=("$mod")
+        elif [[ -n "${known_renamed[$mod]:-}" ]]; then
+            addons_renamed+=("${mod} -> ${known_renamed[$mod]}")
+        else
+            addons_truly_missing+=("$mod")
+        fi
+    done
+}
+
 export PROJECT_ROOT DATASTORE_PATH FILESTORE_SUBPATH
 export -f log_info log_warn log_error log_step confirm_or_exit
 export -f check_required_commands
 export -f query_postgres_container copy_database copy_filestore run_compose exec_python_script_in_odoo_shell
+export -f classify_missing_addons
