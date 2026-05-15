@@ -31,8 +31,10 @@ fi
 
 check_required_commands
 
-readonly ORIGIN_VERSION="$1"
-readonly FINAL_VERSION="$2"
+export ORIGIN_VERSION="$1"
+readonly ORIGIN_VERSION
+export FINAL_VERSION="$2"
+readonly FINAL_VERSION
 readonly ORIGIN_DB_NAME="$3"
 readonly ORIGIN_SERVICE_NAME="$4"
 

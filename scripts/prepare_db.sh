@@ -60,9 +60,31 @@ echo "Retrieve missing addons..."
 missing_addons=$(query_postgres_container "$SQL_MISSING_ADDONS" "$DB_NAME")
 
 log_step "ADD-ONS CHECK"
-echo "Installed add-ons not available in final Odoo version:"
-echo "$missing_addons"
-confirm_or_exit "Do you accept to migrate with these add-ons still installed?"
+classify_missing_addons "$missing_addons"
+
+if [[ ${#addons_obsolete[@]} -gt 0 ]]; then
+    log_info "Obsolete modules (${#addons_obsolete[@]}):"
+    printf "%s\n" "${addons_obsolete[@]}"
+    echo ""
+fi
+if [[ ${#addons_core[@]} -gt 0 ]]; then
+    log_info "Merged into Odoo Core (${#addons_core[@]}):"
+    printf "%s\n" "${addons_core[@]}"
+    echo ""
+fi
+if [[ ${#addons_renamed[@]} -gt 0 ]]; then
+    log_info "Renamed modules (${#addons_renamed[@]}):"
+    printf "%s\n" "${addons_renamed[@]}"
+    echo ""
+fi
+if [[ ${#addons_truly_missing[@]} -gt 0 ]]; then
+    log_warn "Truly missing modules (${#addons_truly_missing[@]}):"
+    printf "%s\n" "${addons_truly_missing[@]}"
+    echo ""
+    confirm_or_exit "Do you accept to migrate with these add-ons truly missing?"
+else
+    log_info "No truly missing modules — all accounted for."
+fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PYTHON_SCRIPT="${SCRIPT_DIR}/lib/python/check_views.py"
