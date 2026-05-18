@@ -2,7 +2,10 @@
 obsolete: []
 
 # Modules merged into Odoo Core in version 17.0
-merged_in_core: []
+merged_in_core:
+  - project_list
+  - web_advanced_search
+  - web_listview_range_select
 
 # Modules renamed in version 17.0
 renamed: []

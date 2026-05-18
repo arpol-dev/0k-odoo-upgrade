@@ -1,10 +1,23 @@
 # Modules that became obsolete in version 16.0
-obsolete: []
+obsolete:
+  - account_reconciliation_widget
+  - account_statement_import
+  - account_statement_import_file_reconciliation_widget
 
 # Modules merged into Odoo Core in version 16.0
-merged_in_core: []
+merged_in_core:
+  - account_balance_line
+  - l10n_ch_states
+  - project_task_dependency
+  - web_ir_actions_act_view_reload
+  - mail_activity_creator
+  - website_sale_require_login
 
 # Modules renamed in version 16.0
-renamed: []
-#  - old: old_name
-#    new: new_name
+renamed:
+  - old: account_statement_import_file_reconcile_oca
+    new: account_statement_import_file_reconcile_oca
+  - old: mass_editing
+    new: server_action_mass_edit
+  - old: crm_project
+    new: crm_lead_to_task
