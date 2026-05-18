@@ -1,10 +1,35 @@
 # Modules that became obsolete in version 18.0
-obsolete: []
+obsolete:
+  - account_payment_paired_internal_transfer
+  - account_reconciliation_widget
 
 # Modules merged into Odoo Core in version 18.0
-merged_in_core: []
+merged_in_core:
+  - account_payment_partner
 
 # Modules renamed in version 18.0
-renamed: []
-#  - old: old_name
-#    new: new_name
+renamed:
+  # Refactor bank-payment-alternative
+  - old: account_payment_mode
+    new: account_payment_base_oca
+  - old: account_payment_sale
+    new: account_payment_base_oca_sale
+  - old: account_payment_order
+    new: account_payment_batch_oca
+  - old: account_payment_order_tier_validation
+    new: account_payment_batch_oca_tier_validation
+  - old: account_banking_pain_base
+    new: account_payment_sepa_base
+  - old: account_banking_sepa_credit_transfer
+    new: account_payment_sepa_credit_transfer
+  - old: account_banking_mandate
+    new: account_payment_mandate
+  - old: account_banking_mandate_sale
+    new: account_payment_mandate_sale
+  - old: account_banking_sepa_direct_debit
+    new: account_payment_sepa_direct_debit
+  # End refactor
+  - old: base_delivery_carrier_label
+    new: delivery_shipping_label_default
+  - old: l10n_fr_oca
+    new: l10n_fr_account_oca

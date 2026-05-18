@@ -1,10 +1,15 @@
 # Modules that became obsolete in version 15.0
-obsolete: []
+obsolete:
+  - l10n_ch_base_bank
+  - l10n_ch_isrb
+  - project_timeline_task_dependency
+  - account_reconcile_reconciliation_date
 
 # Modules merged into Odoo Core in version 15.0
-merged_in_core: []
+merged_in_core:
+  - project_category
 
 # Modules renamed in version 15.0
-renamed: []
-#  - old: old_name
-#    new: new_name
+renamed:
+  - old: crm_phone
+    new: crm_phonecall
