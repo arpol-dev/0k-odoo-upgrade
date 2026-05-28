@@ -44,6 +44,29 @@ PYTHON_SCRIPT="${SCRIPT_DIR}/lib/python/cleanup_modules.py"
 echo "Uninstall obsolete add-ons with script $PYTHON_SCRIPT ..."
 exec_python_script_in_odoo_shell "$DB_NAME" "$DB_NAME" "$PYTHON_SCRIPT"
 
+# ────────────────────────────────────────────────────────────
+# Regenerate POS inalterability hashes if needed
+# ────────────────────────────────────────────────────────────
+HASHES_NEEDED=$(query_postgres_container "
+    SELECT COUNT(*)
+    FROM pos_order po
+    JOIN res_company rc ON rc.id = po.company_id
+    WHERE po.state IN ('paid', 'done', 'invoiced')
+      AND rc.l10n_fr_pos_cert_sequence_id IS NOT NULL
+      AND (po.l10n_fr_hash IS NULL OR po.l10n_fr_secure_sequence_number IS NULL)
+" "$DB_NAME")
+
+if [[ "$HASHES_NEEDED" =~ ^[0-9]+$ && "$HASHES_NEEDED" -gt 0 ]]; then
+    echo ""
+    echo "Found $HASHES_NEEDED pos.order(s) with missing inalterability hash or sequence number."
+    echo "Regenerating all POS hashes..."
+    PYTHON_SCRIPT="${SCRIPT_DIR}/lib/python/regenerate_pos_hashes.py"
+    exec_python_script_in_odoo_shell "$DB_NAME" "$DB_NAME" "$PYTHON_SCRIPT"
+    echo "POS hash regeneration completed."
+else
+    echo "No missing POS hashes detected."
+fi
+
 # Give back the right to user to access to the tables
 # docker exec -u 70 "$DB_CONTAINER_NAME" pgm chown "$FINALE_SERVICE_NAME" "$DB_NAME"
 
