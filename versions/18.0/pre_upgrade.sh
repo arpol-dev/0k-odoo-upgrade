@@ -124,6 +124,8 @@ query_postgres_container "$COMPANY_DEPENDENT_FIX_SQL" ou18 || exit 1
 # Execute SQL pre-migration commands
 PRE_MIGRATE_SQL=$(cat <<'EOF'
 UPDATE account_analytic_plan SET default_applicability=NULL WHERE default_applicability='optional';
+DELETE FROM ir_ui_view WHERE model = 'res.config.settings';
+
 EOF
 )
 echo "SQL command = $PRE_MIGRATE_SQL"
