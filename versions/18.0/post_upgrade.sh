@@ -116,7 +116,7 @@ BEGIN
 
     RAISE NOTICE 'Starting account_payment_batch_oca migration...';
 
-    IF EXISTS (SELECT FROM information_schema.columns 
+    IF EXISTS (SELECT FROM information_schema.columns
                WHERE table_name = 'account_payment_method' AND column_name = 'payment_order_only') THEN
         UPDATE account_payment_method
         SET payment_order_ok = payment_order_only
@@ -136,7 +136,7 @@ BEGIN
     WHERE apml.old_payment_mode_id IS NOT NULL
     AND apm.id = apml.old_payment_mode_id;
 
-    IF EXISTS (SELECT FROM information_schema.tables 
+    IF EXISTS (SELECT FROM information_schema.tables
                WHERE table_name = 'account_journal_account_payment_method_line_rel') THEN
         DELETE FROM account_journal_account_payment_method_line_rel
         WHERE account_payment_method_line_id IN (
@@ -171,6 +171,238 @@ EOF
 
 else
     echo "Table account_payment_mode not found, skipping bank-payment migration."
+fi
+
+# ============================================================================
+# FIX: stock_picking name='/' and missing POS picking type sequences
+#
+# Two issues can occur after migration:
+#
+# 1. stock_picking records with name='/' violate the new V18 unique constraint
+#    stock_picking_name_uniq (name, company_id). In previous versions this
+#    constraint did not exist, so multiple pickings could share name='/'.
+#
+# 2. POS picking types (pos_type_id on stock_warehouse) may lack a sequence_id.
+#    In V18, stock.picking.create() assigns the name from picking_type.sequence_id,
+#    but if sequence_id is NULL the name stays '/' and the unique constraint is
+#    violated on every new POS payment.
+#
+#    The standard _create_missing_pos_picking_types() only fixes warehouses where
+#    pos_type_id is NULL — it does NOT fix existing pos_type_id records that are
+#    missing their sequence_id.
+#
+# Only executed if stock module tables exist.
+# ============================================================================
+
+STOCK_PICKING_TABLE_EXISTS=$(query_postgres_container "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'stock_picking';" ou18 2>/dev/null | grep -E '^\s*[0-9]+' | tr -d ' ' || echo "0")
+
+if [ "$STOCK_PICKING_TABLE_EXISTS" -gt 0 ]; then
+    echo "stock_picking table exists, proceeding with POS picking fixes..."
+
+    # --- Step 1: Rename stock_picking records with name='/' ---
+    FIX_SLASH_PICKING_NAMES_SQL=$(cat <<'EOF'
+DO $$
+DECLARE
+    slash_count INTEGER;
+BEGIN
+    IF NOT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'stock_picking') THEN
+        RAISE NOTICE 'stock_picking table not found, skipping slash name fix';
+        RETURN;
+    END IF;
+
+    SELECT COUNT(*) INTO slash_count FROM stock_picking WHERE name = '/';
+
+    IF slash_count > 0 THEN
+        UPDATE stock_picking SET name = 'MIGRATED-' || id WHERE name = '/';
+        RAISE NOTICE 'Renamed % stock_picking record(s) with name=/ to MIGRATED-<id>', slash_count;
+    ELSE
+        RAISE NOTICE 'No stock_picking with name=/ found, nothing to rename';
+    END IF;
+END $$;
+EOF
+)
+    echo "Fixing stock_picking names with '/'..."
+    query_postgres_container "$FIX_SLASH_PICKING_NAMES_SQL" ou18 || exit 1
+
+    # --- Step 2: Create missing ir.sequence for POS picking types without sequence ---
+    FIX_POS_PICKING_TYPE_SEQUENCES_SQL=$(cat <<'EOF'
+DO $$
+DECLARE
+    pt_rec RECORD;
+    seq_id INTEGER;
+    seq_name TEXT;
+    seq_prefix TEXT;
+BEGIN
+    IF NOT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'stock_picking_type') THEN
+        RAISE NOTICE 'stock_picking_type table not found, skipping POS sequence fix';
+        RETURN;
+    END IF;
+
+    IF NOT EXISTS (SELECT FROM information_schema.columns
+                   WHERE table_name = 'stock_warehouse' AND column_name = 'pos_type_id') THEN
+        RAISE NOTICE 'stock_warehouse.pos_type_id column not found (point_of_sale not installed), skipping POS sequence fix';
+        RETURN;
+    END IF;
+
+    FOR pt_rec IN
+        SELECT spt.id AS picking_type_id,
+               spt.name AS picking_type_name,
+               COALESCE(spt.sequence_code, 'POS') AS sequence_code,
+               sw.code AS warehouse_code,
+               sw.name AS warehouse_name,
+               sw.company_id
+        FROM stock_picking_type spt
+        JOIN stock_warehouse sw ON sw.pos_type_id = spt.id
+        WHERE spt.sequence_id IS NULL OR spt.sequence_id = 0
+    LOOP
+        seq_prefix := pt_rec.warehouse_code || '/' || pt_rec.sequence_code || '/';
+        seq_name := pt_rec.warehouse_name || ' Picking POS';
+
+        INSERT INTO ir_sequence (
+            name, prefix, padding, company_id, implementation,
+            number_increment, number_next, active
+        ) VALUES (
+            seq_name, seq_prefix, 5, pt_rec.company_id, 'standard',
+            1, 1, true
+        ) RETURNING id INTO seq_id;
+
+        UPDATE stock_picking_type
+        SET sequence_id = seq_id
+        WHERE id = pt_rec.picking_type_id;
+
+        RAISE NOTICE 'Created ir.sequence % (%) for POS picking type % (ID:%) on warehouse %',
+            seq_name, seq_id, pt_rec.picking_type_name, pt_rec.picking_type_id, pt_rec.warehouse_name;
+    END LOOP;
+END $$;
+EOF
+)
+    echo "Creating missing POS picking type sequences..."
+    query_postgres_container "$FIX_POS_PICKING_TYPE_SEQUENCES_SQL" ou18 || exit 1
+
+    # --- Step 3: Create missing PostgreSQL sequences for ir.sequence records ---
+    # When ir.sequence records are created via SQL INSERT (not ORM), the underlying
+    # PostgreSQL sequence (ir_sequence_NNN) is NOT created. This causes errors when
+    # Odoo tries to read or use the sequence.
+    FIX_MISSING_PG_SEQUENCES_SQL=$(cat <<'EOF'
+DO $$
+DECLARE
+    seq_rec RECORD;
+    seq_pg_name TEXT;
+    seq_count INTEGER;
+BEGIN
+    seq_count := 0;
+
+    FOR seq_rec IN
+        SELECT id, number_increment, number_next
+        FROM ir_sequence
+        WHERE implementation = 'standard'
+    LOOP
+        seq_pg_name := 'ir_sequence_' || lpad(seq_rec.id::text, 3, '0');
+
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_class
+            WHERE relkind = 'S' AND relname = seq_pg_name
+        ) THEN
+            EXECUTE format('CREATE SEQUENCE %I INCREMENT BY %s START WITH %s',
+                seq_pg_name, seq_rec.number_increment, seq_rec.number_next);
+            seq_count := seq_count + 1;
+            RAISE NOTICE 'Created PostgreSQL sequence %', seq_pg_name;
+        END IF;
+    END LOOP;
+
+    IF seq_count > 0 THEN
+        RAISE NOTICE 'Created % missing PostgreSQL sequence(s)', seq_count;
+    ELSE
+        RAISE NOTICE 'All PostgreSQL sequences already exist, nothing to create';
+    END IF;
+END $$;
+EOF
+)
+    echo "Creating missing PostgreSQL sequences for ir.sequence records..."
+    query_postgres_container "$FIX_MISSING_PG_SEQUENCES_SQL" ou18 || exit 1
+
+    # --- Step 4: Grant permissions on newly created PostgreSQL sequences ---
+    # Sequences created above are owned by the current DB user, but we ensure
+    # the Odoo DB user has proper access (needed when created by a different superuser).
+    GRANT_PG_SEQUENCES_SQL=$(cat <<'EOF'
+DO $$
+DECLARE
+    seq_rec RECORD;
+    seq_pg_name TEXT;
+    db_user TEXT;
+    grant_count INTEGER;
+BEGIN
+    -- Determine the Odoo database user from the current connection
+    SELECT current_user INTO db_user;
+    grant_count := 0;
+
+    FOR seq_rec IN
+        SELECT id
+        FROM ir_sequence
+        WHERE implementation = 'standard'
+    LOOP
+        seq_pg_name := 'ir_sequence_' || lpad(seq_rec.id::text, 3, '0');
+
+        IF EXISTS (
+            SELECT 1 FROM pg_class
+            WHERE relkind = 'S' AND relname = seq_pg_name
+        ) THEN
+            BEGIN
+                EXECUTE format('GRANT ALL ON SEQUENCE %I TO %I', seq_pg_name, db_user);
+                grant_count := grant_count + 1;
+            EXCEPTION WHEN insufficient_privilege THEN
+                RAISE NOTICE 'Cannot GRANT on % (not owner), skipping', seq_pg_name;
+            END;
+        END IF;
+    END LOOP;
+
+    RAISE NOTICE 'Granted permissions on % PostgreSQL sequence(s) to %', grant_count, db_user;
+END $$;
+EOF
+)
+    echo "Granting permissions on PostgreSQL sequences..."
+    query_postgres_container "$GRANT_PG_SEQUENCES_SQL" ou18 || exit 1
+
+    # --- Step 5: Verification ---
+    VERIFY_POS_FIXES_SQL=$(cat <<'EOF'
+DO $$
+DECLARE
+    slash_count INTEGER;
+    missing_seq_count INTEGER;
+BEGIN
+    -- Check remaining pickings with name='/'
+    IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'stock_picking') THEN
+        SELECT COUNT(*) INTO slash_count FROM stock_picking WHERE name = '/';
+        IF slash_count > 0 THEN
+            RAISE WARNING 'Still % stock_picking record(s) with name=/', slash_count;
+        ELSE
+            RAISE NOTICE 'OK: No stock_picking with name=/ remaining';
+        END IF;
+    END IF;
+
+    -- Check POS picking types without sequence
+    IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'stock_picking_type')
+       AND EXISTS (SELECT FROM information_schema.columns
+                   WHERE table_name = 'stock_warehouse' AND column_name = 'pos_type_id') THEN
+        SELECT COUNT(*) INTO missing_seq_count
+        FROM stock_picking_type spt
+        JOIN stock_warehouse sw ON sw.pos_type_id = spt.id
+        WHERE spt.sequence_id IS NULL OR spt.sequence_id = 0;
+
+        IF missing_seq_count > 0 THEN
+            RAISE WARNING 'Still % POS picking type(s) without sequence_id', missing_seq_count;
+        ELSE
+            RAISE NOTICE 'OK: All POS picking types have a sequence_id';
+        END IF;
+    END IF;
+END $$;
+EOF
+)
+    echo "Verifying POS picking fixes..."
+    query_postgres_container "$VERIFY_POS_FIXES_SQL" ou18 || exit 1
+
+else
+    echo "stock_picking table not found, skipping POS picking fixes."
 fi
 
 echo "Post migration to 18.0 completed!"
