@@ -48,13 +48,18 @@ exec_python_script_in_odoo_shell "$DB_NAME" "$DB_NAME" "$PYTHON_SCRIPT"
 # Regenerate POS inalterability hashes if needed
 # ────────────────────────────────────────────────────────────
 HASHES_NEEDED=$(query_postgres_container "
-    SELECT COUNT(*)
-    FROM pos_order po
-    JOIN res_company rc ON rc.id = po.company_id
-    WHERE po.state IN ('paid', 'done', 'invoiced')
-      AND rc.l10n_fr_pos_cert_sequence_id IS NOT NULL
-      AND (po.l10n_fr_hash IS NULL OR po.l10n_fr_secure_sequence_number IS NULL)
+    SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'pos_order'
 " "$DB_NAME")
+if [[ "$HASHES_NEEDED" =~ ^[0-9]+$ && "$HASHES_NEEDED" -gt 0 ]]; then
+    HASHES_NEEDED=$(query_postgres_container "
+        SELECT COUNT(*)
+        FROM pos_order po
+        JOIN res_company rc ON rc.id = po.company_id
+        WHERE po.state IN ('paid', 'done', 'invoiced')
+          AND rc.l10n_fr_pos_cert_sequence_id IS NOT NULL
+          AND (po.l10n_fr_hash IS NULL OR po.l10n_fr_secure_sequence_number IS NULL)
+    " "$DB_NAME")
+fi
 
 if [[ "$HASHES_NEEDED" =~ ^[0-9]+$ && "$HASHES_NEEDED" -gt 0 ]]; then
     echo ""
