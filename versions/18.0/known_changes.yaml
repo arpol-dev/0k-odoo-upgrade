@@ -6,6 +6,7 @@ obsolete:
 # Modules merged into Odoo Core in version 18.0
 merged_in_core:
   - account_payment_partner
+  - hr_expense_report_merge_attachment
 
 # Modules renamed in version 18.0
 renamed:
