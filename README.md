@@ -9,6 +9,7 @@ A tool for migrating Odoo databases between major versions, using [OpenUpgrade](
 - [Project Structure](#project-structure)
 - [How It Works](#how-it-works)
 - [Usage](#usage)
+- [Resuming a Failed Migration](#resuming-a-failed-migration)
 - [Customization](#customization)
 - [Troubleshooting](#troubleshooting)
 
@@ -158,7 +159,7 @@ The script performs a **step-by-step migration** between each major version. For
 ### Running the Migration
 
 ```bash
-./upgrade.sh <source_version> <target_version> <database_name> <source_service>
+./upgrade.sh <source_version> <target_version> <database_name> <source_service> [--resume-from|-r <version>]
 ```
 
 **Parameters:**
@@ -168,6 +169,11 @@ The script performs a **step-by-step migration** between each major version. For
 | `target_version` | Target Odoo version (without .0) | `17` |
 | `database_name` | Database name | `my_prod_db` |
 | `source_service` | Source Docker Compose service | `odoo14` |
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `--resume-from <version>`, `-r <version>` | Resume from an intermediate checkpoint (see [Resuming a Failed Migration](#resuming-a-failed-migration)) |
 
 **Example:**
 ```bash
@@ -238,6 +244,48 @@ compose run odoo17 shell -d ou17 --no-http --stop-after-init < lib/python/valida
 - **Colored terminal output** with `[OK]`, `[ERROR]`, `[WARN]` indicators
 - **JSON report** written to `/tmp/validation_views_<db>_<timestamp>.json`
 - **Exit code**: `0` = success, `1` = errors found
+
+## Resuming a Failed Migration
+
+Each version hop copies the database before modifying it (`ou14` → `ou15` → `ou16` → …). If a migration crashes mid-way, the intermediate databases from completed hops are still intact and can be used as a restart point.
+
+### How It Works
+
+Use `--resume-from <version>` (or `-r <version>`) to restart from an intermediate checkpoint:
+
+```bash
+./upgrade.sh <source_version> <target_version> <database_name> <source_service> --resume-from <checkpoint_version>
+```
+
+When a checkpoint is specified, the script:
+- **Skips** the initial database and filestore copy
+- **Skips** `prepare_db.sh` (already done before the crash)
+- **Starts the migration loop** from `checkpoint_version + 1`
+
+### Example
+
+A migration from 14 to 18 crashes during the 16→17 hop. The database `ou15` was successfully created. Resume from there:
+
+```bash
+./upgrade.sh 14 18 my_database odoo14 --resume-from 15
+```
+
+This runs: `16.0 → 17.0 → 18.0`, starting from `ou15`.
+
+### Constraints
+
+- The checkpoint version must be strictly between the source and target versions.
+- The intermediate database (`ou<version>`) and its filestore must exist before resuming.
+
+### Restarting From Scratch
+
+To restart a full migration from the beginning (ignoring all intermediate databases):
+
+```bash
+./upgrade.sh 14 18 my_database odoo14
+```
+
+The script automatically drops and recreates the final target database (`ou18`) if it already exists.
 
 ## Customization
 
