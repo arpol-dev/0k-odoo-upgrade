@@ -4,6 +4,13 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib/common.sh"
 
+readonly LOG_FILE="${SCRIPT_DIR}/migration.log"
+if [[ -z "${_MIGRATION_LOGGING:-}" ]]; then
+    rm -f "$LOG_FILE"
+    export _MIGRATION_LOGGING=1
+    exec script -q -c "$(printf '%q ' "$0" "$@")" "$LOG_FILE"
+fi
+
 ####################
 # USAGE & ARGUMENTS
 ####################
@@ -225,3 +232,4 @@ log_step "POST-UPGRADE PROCESSES"
 "${SCRIPT_DIR}/scripts/finalize_db.sh" "$FINALE_DB_NAME" "$FINALE_SERVICE_NAME"
 
 log_step "UPGRADE PROCESS ENDED WITH SUCCESS"
+log_info "Full logs available at: ${LOG_FILE}"
