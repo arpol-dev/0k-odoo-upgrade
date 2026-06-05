@@ -413,10 +413,30 @@ The script works on a **copy** of the original database. You can restart as many
 
 ### Viewing Detailed Logs
 
-Odoo/OpenUpgrade logs are displayed in real-time. For a problematic migration:
+All output (scripts, Docker containers, OpenUpgrade logs) is automatically saved to `migration.log` at the project root. The file is overwritten at the start of each run (full migration or resume).
+
+```bash
+# Follow live output while also saving to file (already done automatically)
+tail -f migration.log
+
+# Search for errors after the fact
+grep -i error migration.log
+
+# View with ANSI colors preserved (less handles CRLF line endings natively)
+less -R migration.log
+
+# Plain text output without CRLF artifacts
+cat migration.log | col -b
+```
+
+> **Note:** `migration.log` is recorded via a pseudo-TTY (`script`), which preserves
+> color output in the terminal. As a side effect, the file uses `\r\n` line endings.
+> Use `less -R` or `col -b` for clean viewing.
+
+For a problematic migration:
 
 1. Note the version where the error occurs
-2. Check the logs to identify the problematic module/table
+2. Check `migration.log` to identify the problematic module/table
 3. Add a fix in the `pre_upgrade.sh` for that version
 4. Restart the migration
 
