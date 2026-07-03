@@ -23,6 +23,24 @@ EOF
 )
 query_postgres_container "$CLEANUP_SQL" "$DB_NAME"
 
+# Reset modules still marked as 'to upgrade' before launching the Odoo shell
+# scripts below. Loading the registry in `odoo shell` re-triggers the upgrade
+# of these modules, which can fail on broken views (e.g. website_sale
+# TypeError). The controlled `-u all` at the end of this script performs the
+# real update afterwards. We deliberately do NOT touch 'to install' modules:
+# forcing them to 'installed' would skip their install scripts entirely.
+#
+# Uncomment the SELECT below to trace which modules were pending upgrade
+# before we neutralize their state (useful if the `-u all` above is removed).
+# query_postgres_container "
+# SELECT name FROM ir_module_module WHERE state = 'to upgrade' ORDER BY name;
+# " "$DB_NAME" || true
+query_postgres_container "
+UPDATE ir_module_module
+SET state = 'installed'
+WHERE state = 'to upgrade';
+" "$DB_NAME" || true
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 PYTHON_SCRIPT="${SCRIPT_DIR}/lib/python/fix_duplicated_views.py"
@@ -66,7 +84,7 @@ fi
 
 
 # Launch Odoo with database in finale version to run all updates
-run_compose --debug run "$ODOO_SERVICE" -u all --log-level=debug --stop-after-init --no-http
+run_compose --debug run "$ODOO_SERVICE" -u all --log-level=debug --stop-after-init --no-http --load=base,web,openupgrade_framework
 
 echo ""
 echo "Running post-migration view validation..."
