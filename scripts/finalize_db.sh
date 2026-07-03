@@ -12,17 +12,6 @@ CLEANUP_SQL=$(cat <<'EOF'
 DROP SEQUENCE IF EXISTS base_registry_signaling;
 DROP SEQUENCE IF EXISTS base_cache_signaling;
 
--- Reset website templates to their original state.
--- Views with arch_fs (file source) that have been customized (arch_db not null)
--- are reset to use the file version, EXCEPT for actual website pages which
--- contain user content that must be preserved.
-UPDATE ir_ui_view
-SET arch_db = NULL
-WHERE arch_fs IS NOT NULL
-  AND arch_fs LIKE 'website/%'
-  AND arch_db IS NOT NULL
-  AND id NOT IN (SELECT view_id FROM website_page);
-
 -- Purge compiled frontend assets (CSS/JS bundles).
 -- These cached files reference old asset versions and must be regenerated
 -- by Odoo after migration to avoid broken stylesheets and scripts.
