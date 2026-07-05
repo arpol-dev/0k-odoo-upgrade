@@ -76,7 +76,7 @@ ou17:
 ou18:
   charm: odoo-tecnativa
   docker-compose:
-    image: docker.0k.io/mirror/odoo:rc_18.0-ELABORE-LIGHT
+    image: docker.0k.io/mirror/odoo:rc_18.0-ArPol
     ## Important to keep as a list: otherwise it'll overwrite charm's arguments.
     command:
       - "--log-level=debug"
