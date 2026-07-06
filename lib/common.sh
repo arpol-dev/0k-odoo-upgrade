@@ -40,6 +40,10 @@ confirm_or_exit() {
     echo "N - No, cancel"
     read -r -n 1 -p "Your choice: " choice
     echo ""
+    # Drain any leftover buffered input (e.g. the Enter keystroke left over from a
+    # previous 1-char read), so it does not get silently consumed by the NEXT
+    # confirm_or_exit call and misread as an empty/cancelled answer.
+    while read -r -t 0.1 -n 1 _junk; do :; done
     case "$choice" in
         [Yy]) return 0 ;;
         *) log_error "Cancelled by user."; exit 1 ;;
