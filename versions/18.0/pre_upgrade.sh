@@ -121,9 +121,6 @@ EOF
 echo "Fixing company-dependent columns for Odoo 18..."
 query_postgres_container "$COMPANY_DEPENDENT_FIX_SQL" ou18 || exit 1
 
-EOF
-)
-
 # Execute SQL pre-migration commands
 PRE_MIGRATE_SQL=$(cat <<'EOF'
 UPDATE account_analytic_plan SET default_applicability=NULL WHERE default_applicability='optional';
