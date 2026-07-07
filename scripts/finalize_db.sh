@@ -23,6 +23,58 @@ EOF
 )
 query_postgres_container "$CLEANUP_SQL" "$DB_NAME"
 
+# ────────────────────────────────────────────────────────────
+# Fix orphan ir_filters pointing to deleted ir_actions
+#
+# During OpenUpgrade migrations, ir_actions records can be deleted and
+# recreated with new ids, while ir_filters.action_id (custom user filters)
+# still points to the old, now-missing action. When a user opens the custom
+# filters list, Odoo tries to resolve the display_name of the many2one
+# action_id and raises "Record does not exist or has been deleted
+# (ir.actions.actions(<id>,))". We detach such filters (set action_id = NULL),
+# which keeps the filter usable and only drops the broken action link.
+# ────────────────────────────────────────────────────────────
+FIX_ORPHAN_FILTERS_SQL=$(cat <<'EOF'
+DO $$
+DECLARE
+    orphan_count INTEGER;
+    remaining INTEGER;
+BEGIN
+    SELECT COUNT(*) INTO orphan_count
+    FROM ir_filters f
+    LEFT JOIN ir_actions a ON a.id = f.action_id
+    WHERE f.action_id IS NOT NULL AND a.id IS NULL;
+
+    IF orphan_count > 0 THEN
+        UPDATE ir_filters f
+        SET action_id = NULL
+        FROM (
+            SELECT f2.id
+            FROM ir_filters f2
+            LEFT JOIN ir_actions a ON a.id = f2.action_id
+            WHERE f2.action_id IS NOT NULL AND a.id IS NULL
+        ) orphans
+        WHERE f.id = orphans.id;
+        RAISE NOTICE 'Detached % orphan ir_filters pointing to deleted ir_actions', orphan_count;
+    ELSE
+        RAISE NOTICE 'OK: no orphan ir_filters to fix';
+    END IF;
+
+    -- Verification
+    SELECT COUNT(*) INTO remaining
+    FROM ir_filters f
+    LEFT JOIN ir_actions a ON a.id = f.action_id
+    WHERE f.action_id IS NOT NULL AND a.id IS NULL;
+
+    IF remaining > 0 THEN
+        RAISE WARNING 'Still % orphan ir_filters remaining after fix', remaining;
+    END IF;
+END $$;
+EOF
+)
+echo "Fixing orphan ir_filters pointing to deleted ir_actions..."
+query_postgres_container "$FIX_ORPHAN_FILTERS_SQL" "$DB_NAME"
+
 # Reset modules still marked as 'to upgrade' before launching the Odoo shell
 # scripts below. Loading the registry in `odoo shell` re-triggers the upgrade
 # of these modules, which can fail on broken views (e.g. website_sale
