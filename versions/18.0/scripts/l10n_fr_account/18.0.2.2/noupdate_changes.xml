@@ -1,0 +1,33 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!--
+    0k / Élabore customization of the French VAT report (l10n_fr_account).
+
+    Adds an editable "adjustment" expression on box 25 (VAT credit) and
+    integrates it into the box 25 balance formula. Historically this lived in a
+    full copy of l10n_fr_account/data/tax_report_data.xml that shadowed the core
+    module; it is now applied the OpenUpgrade way, via load_data() from
+    post-migration.py, without duplicating the core module.
+
+    Loaded with mode="init"; records use the module's own xml ids
+    (l10n_fr_account.*). tax_report_25_formula already exists in core and is
+    updated here; tax_report_25_adjustment is new and gets created.
+-->
+<odoo>
+  <!-- Update the box 25 balance formula to include the adjustment -->
+  <record id="tax_report_25_formula" model="account.report.expression">
+    <field name="report_line_id" ref="l10n_fr_account.tax_report_25"/>
+    <field name="label">balance</field>
+    <field name="engine">aggregation</field>
+    <field name="formula">box_23.balance - box_16.balance + box_25.adjustment</field>
+    <field name="subformula">if_above(EUR(0))</field>
+  </record>
+
+  <!-- New editable external "adjustment" expression on box 25 -->
+  <record id="tax_report_25_adjustment" model="account.report.expression">
+    <field name="report_line_id" ref="l10n_fr_account.tax_report_25"/>
+    <field name="label">adjustment</field>
+    <field name="engine">external</field>
+    <field name="formula">sum</field>
+    <field name="subformula">editable;rounding=0</field>
+  </record>
+</odoo>

@@ -1,2 +1,4 @@
 final_404_addons
 migration.log
+__pycache__/
+*.pyc
