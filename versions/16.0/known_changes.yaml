@@ -21,3 +21,12 @@ renamed:
     new: server_action_mass_edit
   - old: crm_project
     new: crm_lead_to_task
+
+# Unique constraints newly introduced in 16.0
+new_unique_constraints:
+  - model: utm.source
+    fields: [name]
+  - model: utm.medium
+    fields: [name]
+  - model: utm.campaign
+    fields: [name]

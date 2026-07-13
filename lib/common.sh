@@ -100,6 +100,27 @@ exec_python_script_in_odoo_shell() {
     run_compose --debug run "$service_name" shell -d "$db_name" --no-http --stop-after-init < "$python_script"
 }
 
+# Same as exec_python_script_in_odoo_shell but prepends a Python preamble read
+# from stdin (heredoc). Useful to inject environment values into the Odoo shell
+# when the compose wrapper does not reliably propagate host env vars into the
+# container. The preamble runs before the script body in the same interpreter.
+#
+# Usage:
+#   exec_python_script_in_odoo_shell_with_preamble svc db /path/script.py <<'PY'
+#   import os; os.environ['FOO'] = 'bar'
+#   PY
+exec_python_script_in_odoo_shell_with_preamble() {
+    local service_name="$1"
+    local db_name="$2"
+    local python_script="$3"
+
+    local preamble
+    preamble="$(cat)"
+
+    { printf '%s\n' "$preamble"; cat "$python_script"; } \
+        | run_compose --debug run "$service_name" shell -d "$db_name" --no-http --stop-after-init
+}
+
 # Classifies missing modules into 4 categories based on the known_changes.yaml
 # files from each traversed version (from ORIGIN_VERSION+1 to FINAL_VERSION).
 # The following global arrays are populated:
@@ -175,8 +196,50 @@ classify_missing_addons() {
     done
 }
 
+# Aggregates the `new_unique_constraints` sections from the known_changes.yaml
+# files of every traversed version (from ORIGIN_VERSION+1 to FINAL_VERSION) into
+# a single JSON array printed on stdout, e.g.:
+#   [{"model":"utm.source","fields":["name"]},{"model":"utm.medium","fields":["name"]}]
+# Duplicate (model, fields) entries are collapsed. Prints "[]" when none.
+#
+# Prerequisites: ORIGIN_VERSION and FINAL_VERSION must be exported.
+collect_new_unique_constraints() {
+    local versions_path="${PROJECT_ROOT}/versions"
+    local v
+    local -a json_parts=()
+    local -A seen=()
+
+    for v in $(seq $((ORIGIN_VERSION + 1)) "$FINAL_VERSION"); do
+        local yaml_file="${versions_path}/${v}.0/known_changes.yaml"
+        [[ -f "$yaml_file" ]] || continue
+
+        local count
+        count=$(yq '.new_unique_constraints | length' "$yaml_file" 2>/dev/null)
+        [[ "$count" =~ ^[0-9]+$ && "$count" -gt 0 ]] || continue
+
+        local i
+        for ((i = 0; i < count; i++)); do
+            local model fields entry
+            model=$(yq -o=json ".new_unique_constraints[$i].model" "$yaml_file" 2>/dev/null)
+            fields=$(yq -o=json -I=0 ".new_unique_constraints[$i].fields" "$yaml_file" 2>/dev/null)
+            [[ -n "$model" && "$model" != "null" ]] || continue
+            [[ -n "$fields" && "$fields" != "null" ]] || continue
+            entry="{\"model\":${model},\"fields\":${fields}}"
+            if [[ -z "${seen[$entry]:-}" ]]; then
+                seen["$entry"]=1
+                json_parts+=("$entry")
+            fi
+        done
+    done
+
+    local IFS=','
+    printf '[%s]' "${json_parts[*]}"
+}
+
 export PROJECT_ROOT DATASTORE_PATH FILESTORE_SUBPATH
 export -f log_info log_warn log_error log_step confirm_or_exit
 export -f check_required_commands
 export -f query_postgres_container copy_database copy_filestore run_compose exec_python_script_in_odoo_shell
+export -f exec_python_script_in_odoo_shell_with_preamble
 export -f classify_missing_addons
+export -f collect_new_unique_constraints

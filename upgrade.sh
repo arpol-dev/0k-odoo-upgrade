@@ -232,4 +232,20 @@ log_step "POST-UPGRADE PROCESSES"
 "${SCRIPT_DIR}/scripts/finalize_db.sh" "$FINALE_DB_NAME" "$FINALE_SERVICE_NAME"
 
 log_step "UPGRADE PROCESS ENDED WITH SUCCESS"
+
+# Report any records that were renamed to satisfy new unique constraints.
+# The deduplication runs on the source DB (ou${ORIGIN_VERSION}) during
+# prepare_db.sh and writes a timestamped JSON report to /tmp.
+readarray -t dedup_reports < <(ls -1t /tmp/dedup_unique_constraints_"${COPY_DB_NAME}"_*.json 2>/dev/null || true)
+if [[ ${#dedup_reports[@]} -gt 0 ]]; then
+    latest_report="${dedup_reports[0]}"
+    renamed_count=$(yq -p=json '.renamed_count' "$latest_report" 2>/dev/null || echo "?")
+    log_info "Unique-constraint deduplication: ${renamed_count} record(s) renamed in the source DB before migration."
+    log_info "Details: ${latest_report}"
+    if [[ "$renamed_count" =~ ^[0-9]+$ && "$renamed_count" -gt 0 ]]; then
+        yq -p=json -r '.renamed[] | "  - \(.model) #\(.id) [\(.field)]: \(.old_value) -> \(.new_value)"' \
+            "$latest_report" 2>/dev/null || true
+    fi
+fi
+
 log_info "Full logs available at: ${LOG_FILE}"

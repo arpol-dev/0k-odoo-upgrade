@@ -87,6 +87,30 @@ else
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+#############################################
+## Deduplicate soon-to-be-unique fields    ##
+#############################################
+# Some target versions add UNIQUE constraints on fields that allowed duplicates
+# in the source version (e.g. utm.source.name in 16.0). Left untouched, the
+# unique index creation aborts the migration with a UniqueViolation. We rename
+# duplicates in the source DB now, before the migration loop.
+log_step "UNIQUE CONSTRAINTS DEDUP"
+UNIQUE_CONSTRAINTS_JSON=$(collect_new_unique_constraints)
+if [[ "$UNIQUE_CONSTRAINTS_JSON" == "[]" || -z "$UNIQUE_CONSTRAINTS_JSON" ]]; then
+    log_info "No new unique constraints declared for the traversed versions — skipping."
+else
+    log_info "Checking unique constraints: $UNIQUE_CONSTRAINTS_JSON"
+    DEDUP_SCRIPT="${SCRIPT_DIR}/lib/python/dedup_unique_constraints.py"
+    # Inject the catalog via a Python preamble because the compose wrapper does
+    # not reliably propagate host environment variables into the container.
+    exec_python_script_in_odoo_shell_with_preamble "$DB_NAME" "$DB_NAME" "$DEDUP_SCRIPT" <<PY
+import os
+os.environ['DEDUP_UNIQUE_CONSTRAINTS'] = ${UNIQUE_CONSTRAINTS_JSON@Q}
+os.environ['DEDUP_REPORT'] = '1'
+PY
+fi
+
 PYTHON_SCRIPT="${SCRIPT_DIR}/lib/python/check_views.py"
 echo "Check views with script $PYTHON_SCRIPT ..."
 exec_python_script_in_odoo_shell "$DB_NAME" "$DB_NAME" "$PYTHON_SCRIPT"

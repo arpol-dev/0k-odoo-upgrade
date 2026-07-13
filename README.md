@@ -39,10 +39,11 @@ cd 0k-odoo-upgrade
 ├── lib/
 │   ├── common.sh              # Shared bash functions
 │   └── python/                # Python utility scripts
-│       ├── check_views.py           # View analysis (pre-migration)
-│       ├── validate_views.py        # View validation (post-migration)
-│       ├── fix_duplicated_views.py  # Fix duplicated views
-│       └── cleanup_modules.py       # Obsolete module cleanup
+│       ├── check_views.py                 # View analysis (pre-migration)
+│       ├── validate_views.py              # View validation (post-migration)
+│       ├── fix_duplicated_views.py        # Fix duplicated views
+│       ├── dedup_unique_constraints.py    # Dedup soon-to-be-unique fields (pre-migration)
+│       └── cleanup_modules.py             # Obsolete module cleanup
 │
 ├── scripts/
 │   ├── prepare_db.sh          # Database preparation before migration
@@ -84,6 +85,8 @@ The script performs a **step-by-step migration** between each major version. For
 3. **Database Preparation** (`scripts/prepare_db.sh`)
    - Neutralization: disable mail servers and cron jobs
    - Detection of installed modules missing in the target version
+   - Deduplication of fields that become `UNIQUE` in a traversed version
+     (see [Unique Constraints](#unique-constraints-new_unique_constraints))
    - View state verification
    - User confirmation prompt
 
@@ -356,6 +359,48 @@ Version scripts have access to functions defined in `lib/common.sh`:
 | `log_info`, `log_warn`, `log_error` | Logging functions |
 | `log_step "title"` | Display a section header |
 
+### Unique Constraints (`new_unique_constraints`)
+
+Some Odoo versions add a `UNIQUE` constraint on a field that previously allowed
+duplicates. A well-known case is `utm.source.name` in 16.0. When the migration
+rebuilds the model, PostgreSQL tries to create the unique index and aborts the
+whole registry load if the legacy data contains duplicates:
+
+```
+psycopg2.errors.UniqueViolation: could not create unique index "utm_source_unique_name"
+DETAIL:  Key (name)=(Webinaire gouvernance (copie)) is duplicated.
+```
+
+To prevent this, declare the newly-introduced unique constraints in the
+`known_changes.yaml` of the version that introduces them, under the
+`new_unique_constraints` key. Only `model` and `fields` are needed — the table,
+the column type and the translatable (jsonb) flag are resolved automatically
+from the ORM:
+
+```yaml
+new_unique_constraints:
+  - model: utm.source
+    fields: [name]
+  - model: utm.medium
+    fields: [name]
+  - model: utm.campaign
+    fields: [name]
+```
+
+During `prepare_db.sh`, the `dedup_unique_constraints.py` checker aggregates the
+declarations of every traversed version and, on the **source** database:
+
+- detects duplicate groups (for translatable/jsonb fields it compares the
+  indexed `en_US` value, not the raw jsonb);
+- keeps the record with the smallest `id` untouched and renames each other
+  duplicate by appending ` [<id>]` to every language key (jsonb) or to the
+  plain value (varchar) — all foreign keys are preserved;
+- writes a timestamped report to
+  `/tmp/dedup_unique_constraints_<source_db>_<timestamp>.json`.
+
+Renamed records are summarized at the end of `migration.log` (see the final
+`UPGRADE PROCESS ENDED WITH SUCCESS` section).
+
 ### Adding a New Version
 
 To add support for a new version (e.g., 19.0):
@@ -368,6 +413,8 @@ cp versions/18.0/*.sh versions/19.0/
 # - Change references from ou18 → ou19
 # - Change the port from -p 8018:8069 → -p 8019:8069
 # - Add SQL fixes specific to this migration
+# - Declare any new UNIQUE constraints in versions/19.0/known_changes.yaml
+#   under `new_unique_constraints` (see "Unique Constraints" above)
 ```
 
 ## Troubleshooting
