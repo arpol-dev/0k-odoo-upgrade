@@ -131,6 +131,13 @@ EOF
 echo "SQL command = $PRE_MIGRATE_SQL"
 query_postgres_container "$PRE_MIGRATE_SQL" ou18 || exit 1
 
+# NOTE: Missing generic PCG account xml-ids expected by l10n_fr_account (e.g.
+# account.<company>_pcg_607_account / _pcg_707_account) are recreated generically
+# by the ORM post-migration script
+#   versions/18.0/scripts/l10n_fr_account/18.0.2.2/post-migration-0k-fix-property-account-xmlids.py
+# which runs at stage "post" of l10n_fr_account, before the native "end" script
+# end-migrate_update_taxes.py that would otherwise crash on the missing xml-id.
+
 # Copy filestores
 copy_filestore ou17 ou17 ou18 ou18 || exit 1
 
