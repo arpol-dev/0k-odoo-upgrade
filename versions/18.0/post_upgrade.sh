@@ -404,4 +404,11 @@ EOF
 else
     echo "stock_picking table not found, skipping POS picking fixes."
 fi
+
+# Same reasoning as in pre_upgrade.sh: bump cache-signaling sequences so any
+# already-running Odoo process for this database sees the fixes above
+# instead of a stale in-memory cache. See invalidate_odoo_caches() in
+# lib/common.sh.
+invalidate_odoo_caches ou18
+
 echo "Post migration to 18.0 completed!"

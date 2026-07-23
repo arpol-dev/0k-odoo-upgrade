@@ -250,4 +250,11 @@ query_postgres_container "$PRE_MIGRATE_SQL" ou18 || exit 1
 # Copy filestores
 copy_filestore ou17 ou17 ou18 ou18 || exit 1
 
+# All the fixes above write directly to Postgres, bypassing Odoo's ORM entirely.
+# Bump cache-signaling sequences so any already-running Odoo process for this
+# database (e.g. a persistent test/QA container) picks the changes up on its
+# next request instead of serving a stale in-memory cache. See
+# invalidate_odoo_caches() in lib/common.sh for details.
+invalidate_odoo_caches ou18
+
 echo "Ready for migration to 18.0!"

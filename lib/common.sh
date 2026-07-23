@@ -67,6 +67,45 @@ query_postgres_container() {
     echo "$result"
 }
 
+# Bumps every Odoo cache-signaling sequence (base_registry_signaling,
+# base_cache_signaling_*) found in the target database.
+#
+# Why this exists: pre/post_upgrade.sh fix data via direct SQL
+# (query_postgres_container), bypassing Odoo's ORM entirely. Any Odoo worker
+# process already running against this database (typically a persistent
+# test/QA container kept up via `compose run -d`/`up -d` for manual or
+# Playwright-based verification, cf. migration-odoo skill 5.7.2) has already
+# cached the pre-fix state in memory (parsed view archs, ir.rule domains,
+# etc.) and has no way to notice a raw SQL UPDATE happened underneath it --
+# it keeps serving the stale cached version until told otherwise.
+#
+# Odoo's own cross-process invalidation mechanism is exactly these
+# PostgreSQL sequences: each worker checks them on every request and
+# invalidates the matching local cache the moment it sees one advance
+# further than what it last observed. Bumping them here means an
+# already-running container picks up the fix on its very next request --
+# no restart needed. Verified 2026-07-23 (Perdelle migration test): a raw
+# SQL view edit was picked up live by an already-running `ou18` container
+# immediately after calling this function, no docker restart involved.
+#
+# Harmless/cheap to call even with no live container listening (during the
+# normal upgrade.sh pipeline, each version's Odoo pass is an ephemeral
+# `compose run --stop-after-init` container started *after* pre_upgrade.sh's
+# SQL already ran, so there's usually nothing stale to invalidate there) --
+# call it as a matter of habit at the end of any pre/post_upgrade.sh block
+# that writes directly to Odoo-managed tables (ir.ui.view, ir.rule,
+# ir.model.fields, ir.model.data, ...).
+invalidate_odoo_caches() {
+    local db_name="$1"
+    local seq
+    for seq in $(query_postgres_container \
+        "SELECT sequence_name FROM information_schema.sequences WHERE sequence_name ILIKE '%signaling%';" \
+        "$db_name"); do
+        [[ -z "$seq" ]] && continue
+        query_postgres_container "SELECT nextval('${seq}');" "$db_name" >/dev/null
+    done
+}
+
 copy_database() {
     local from_db="$1"
     local to_service="$2"
@@ -182,5 +221,5 @@ classify_missing_addons() {
 export PROJECT_ROOT DATASTORE_PATH FILESTORE_SUBPATH
 export -f log_info log_warn log_error log_step confirm_or_exit
 export -f check_required_commands
-export -f query_postgres_container copy_database copy_filestore run_compose exec_python_script_in_odoo_shell
+export -f query_postgres_container invalidate_odoo_caches copy_database copy_filestore run_compose exec_python_script_in_odoo_shell
 export -f classify_missing_addons
