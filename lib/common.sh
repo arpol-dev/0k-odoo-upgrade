@@ -132,7 +132,22 @@ copy_filestore() {
 # It passes HOST_COMPOSE_YML_FILE to the container, which tries to open it directly
 # instead of using the mounted path. Using a relative path from PROJECT_ROOT avoids this.
 run_compose() {
-    (cd "$PROJECT_ROOT" && compose -f ./config/compose.yml "$@")
+    # If the client-specific migration folder (--migration-dir, see
+    # upgrade.sh) has a compose_overrides.yaml, merge it into every compose
+    # invocation automatically via `-Y`. This is how a client-specific extra
+    # docker-compose volume/env (e.g. mounting a custom addons repo not baked
+    # into the base image, cf. migration-odoo skill 5.5) reaches ALL compose
+    # calls made throughout the pipeline -- including the ones inside
+    # scripts/prepare_db.sh and scripts/finalize_db.sh, which run in their own
+    # subprocess and would otherwise never see a variable exported by
+    # pre_upgrade.sh (child processes cannot modify upgrade.sh's environment).
+    # MIGRATION_DIR itself IS already exported for the whole run, so no new
+    # plumbing is needed beyond this conventionally-named file.
+    local extra_yaml_args=()
+    if [[ -n "${MIGRATION_DIR:-}" && -f "${MIGRATION_DIR}/compose_overrides.yaml" ]]; then
+        extra_yaml_args=(-Y "$(cat "${MIGRATION_DIR}/compose_overrides.yaml")")
+    fi
+    (cd "$PROJECT_ROOT" && compose -f ./config/compose.yml "${extra_yaml_args[@]}" "$@")
 }
 
 exec_python_script_in_odoo_shell() {
