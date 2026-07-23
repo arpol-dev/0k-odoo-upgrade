@@ -17,7 +17,7 @@ fi
 
 usage() {
     cat <<EOF >&2
-Usage: $0 <origin_version> <final_version> <db_name> <service_name> [--resume-from|-r <version>]
+Usage: $0 <origin_version> <final_version> <db_name> <service_name> [--resume-from|-r <version>] [--migration-dir|-m <path>]
 
 Arguments:
     origin_version   Origin Odoo version number (e.g., 12 for version 12.0)
@@ -31,10 +31,22 @@ Options:
                      database (e.g., ou15). Skips the initial DB copy and
                      prepare_db.sh phases. The intermediate DB must exist.
 
+    --migration-dir, -m <path>
+                     Path to a client-specific migration directory (e.g.
+                     /srv/migrations/<client>/<version>). For each version
+                     in the migration path, if
+                     <path>/versions/<version>.0/pre_upgrade.sh and/or
+                     post_upgrade.sh exist and are executable, they are run
+                     right after the generic script of the same name. Client
+                     scripts inherit all functions and variables exported by
+                     lib/common.sh (query_postgres_container, log_*,
+                     PROJECT_ROOT, ...) plus MIGRATION_DIR itself.
+
 Examples:
     $0 14 18 elabore_20241208 odoo14
     $0 14 18 elabore_20241208 odoo14 --resume-from 15
     $0 14 18 elabore_20241208 odoo14 -r 15
+    $0 14 18 perdelle ou14 --migration-dir /srv/migrations/perdelle/18.0
 EOF
     exit 1
 }
@@ -53,8 +65,9 @@ readonly FINAL_VERSION
 readonly ORIGIN_DB_NAME="$3"
 readonly ORIGIN_SERVICE_NAME="$4"
 
-# Parse optional --resume-from / -r flag
+# Parse optional --resume-from / -r and --migration-dir / -m flags
 RESUME_FROM_VERSION=""
+MIGRATION_DIR=""
 shift 4
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -66,6 +79,14 @@ while [[ $# -gt 0 ]]; do
             RESUME_FROM_VERSION="$2"
             shift 2
             ;;
+        --migration-dir|-m)
+            if [[ $# -lt 2 ]]; then
+                log_error "Option '$1' requires a path argument."
+                usage
+            fi
+            MIGRATION_DIR="$2"
+            shift 2
+            ;;
         *)
             log_error "Unknown option: '$1'"
             usage
@@ -73,6 +94,16 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 readonly RESUME_FROM_VERSION
+
+if [[ -n "$MIGRATION_DIR" ]]; then
+    if [[ ! -d "$MIGRATION_DIR" ]]; then
+        log_error "--migration-dir '${MIGRATION_DIR}' does not exist or is not a directory."
+        exit 1
+    fi
+    MIGRATION_DIR="$(cd "$MIGRATION_DIR" && pwd)"
+fi
+export MIGRATION_DIR
+readonly MIGRATION_DIR
 
 readonly COPY_DB_NAME="ou${ORIGIN_VERSION}"
 export FINALE_DB_NAME="ou${FINAL_VERSION}"
@@ -121,6 +152,11 @@ if [[ -n "$RESUME_FROM_VERSION" ]]; then
     log_info "Resume from version ..... $RESUME_FROM_VERSION (ou${RESUME_FROM_VERSION})"
 else
     log_info "Resume from version ..... none (full migration)"
+fi
+if [[ -n "$MIGRATION_DIR" ]]; then
+    log_info "Migration dir ............ $MIGRATION_DIR"
+else
+    log_info "Migration dir ............ none (generic scripts only)"
 fi
 
 log_step "COMPUTED GLOBAL VARIABLES"
@@ -221,8 +257,18 @@ for version in "${versions[@]}"; do
     log_info "START UPGRADE TO ${version}.0"
 
     "${SCRIPT_DIR}/versions/${version}.0/pre_upgrade.sh"
+    if [[ -n "$MIGRATION_DIR" && -x "${MIGRATION_DIR}/versions/${version}.0/pre_upgrade.sh" ]]; then
+        log_info "Running migration-specific pre_upgrade.sh for ${version}.0 (${MIGRATION_DIR})"
+        "${MIGRATION_DIR}/versions/${version}.0/pre_upgrade.sh"
+    fi
+
     "${SCRIPT_DIR}/versions/${version}.0/upgrade.sh"
+
     "${SCRIPT_DIR}/versions/${version}.0/post_upgrade.sh"
+    if [[ -n "$MIGRATION_DIR" && -x "${MIGRATION_DIR}/versions/${version}.0/post_upgrade.sh" ]]; then
+        log_info "Running migration-specific post_upgrade.sh for ${version}.0 (${MIGRATION_DIR})"
+        "${MIGRATION_DIR}/versions/${version}.0/post_upgrade.sh"
+    fi
 
     log_info "END UPGRADE TO ${version}.0"
 done
