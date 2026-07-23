@@ -87,6 +87,41 @@ EOF
 )
 echo "Removing legacy web_tour.tour rows with no user_id..."
 query_postgres_container "$WEB_TOUR_NULL_USER_FIX_SQL" ou18 || exit 1
+
+# ============================================================================
+# FIX: Correct the noupdate ir.rule 'analytic.analytic_plan_comp_rule'
+# (model account.analytic.plan) before OpenUpgrade/the -u all run touches it.
+#
+# Background: this rule's domain_force is "[('company_id', 'in',
+# company_ids + [False])]", but account.analytic.plan has no company_id field
+# in 18.0 (only account.analytic.account, the accounts *within* a plan, is
+# company-scoped -- plans themselves are shared across companies). Since
+# ir.rule records are noupdate="1" by default, a plain module update never
+# refreshes this domain even though the model's fields changed at some point
+# in the migration path -- it silently carries over whatever domain was
+# valid on the origin version.
+#
+# Symptom: any view that renders analytic plan filters (e.g. Reporting >
+# Analytic Report, found via the Playwright menu sweep documented in the
+# migration-odoo skill) crashes with "KeyError: 'company_id'" inside
+# Model.filtered_domain(), raised from analytic/models/analytic_line.py's
+# _patch_view() walking account.analytic.plan.children_ids.
+#
+# Fix: neutralize the domain (always-true) rather than removing the rule --
+# preserves the rule's row/xmlid (so a future core update can still manage
+# it) without the invalid field reference.
+# ============================================================================
+ANALYTIC_PLAN_RULE_FIX_SQL=$(cat <<'EOF'
+UPDATE ir_rule SET domain_force = '[(1,"=",1)]'
+WHERE id IN (
+    SELECT res_id FROM ir_model_data
+    WHERE module = 'analytic' AND name = 'analytic_plan_comp_rule' AND model = 'ir.rule'
+);
+EOF
+)
+echo "Fixing invalid company_id domain on analytic.analytic_plan_comp_rule..."
+query_postgres_container "$ANALYTIC_PLAN_RULE_FIX_SQL" ou18 || exit 1
+
 # ============================================================================
 # BANK-PAYMENT -> BANK-PAYMENT-ALTERNATIVE MODULE RENAMING
 # Migration from OCA/bank-payment to OCA/bank-payment-alternative
