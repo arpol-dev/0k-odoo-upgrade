@@ -57,6 +57,37 @@ echo "Removing contract_payment_mode module..."
 query_postgres_container "$contract_payment_mode_sql" ou18 || exit 1
 
 # ============================================================================
+# FIX: Remove legacy web_tour.tour rows with no user_id before OpenUpgrade's
+# web_tour end-migration step runs.
+#
+# Background: in 17.0, web_tour.tour had one row per (user, tour) completion,
+# with a required-in-practice user_id many2one. In 18.0 this became one row
+# per tour (unique by name), with completions tracked via a user_consumed_ids
+# many2many (relation table res_users_web_tour_tour_rel).
+#
+# Some legacy rows have user_id IS NULL: these are tour-registration markers
+# (e.g. a tour existing without ever being completed by a specific user) with
+# no equivalent in the new schema. OpenUpgrade's own
+# web_tour/18.0.1.0/end-migration.py does:
+#   INSERT INTO res_users_web_tour_tour_rel (res_users_id, web_tour_tour_id)
+#   SELECT legacy_table.user_id, web_tour_tour.id FROM legacy_table, ...
+# with no NULL filtering, so it fails with "null value in column
+# res_users_id violates not-null constraint" as soon as one of these rows
+# is present.
+#
+# Fix pushed upstream to OpenUpgrade would solve this properly, but since
+# ou18 runs from a pre-built Docker image, code changes to OpenUpgrade
+# scripts don't take effect without an image rebuild. So, as with the
+# l10n_fr orphan-expression fix above, we clean up the data directly here,
+# before Odoo's own pre-migration.py renames this table aside.
+# ============================================================================
+WEB_TOUR_NULL_USER_FIX_SQL=$(cat <<'EOF'
+DELETE FROM web_tour_tour WHERE user_id IS NULL;
+EOF
+)
+echo "Removing legacy web_tour.tour rows with no user_id..."
+query_postgres_container "$WEB_TOUR_NULL_USER_FIX_SQL" ou18 || exit 1
+# ============================================================================
 # BANK-PAYMENT -> BANK-PAYMENT-ALTERNATIVE MODULE RENAMING
 # Migration from OCA/bank-payment to OCA/bank-payment-alternative
 # Source PR: https://github.com/OCA/bank-payment-alternative/pull/42

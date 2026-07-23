@@ -404,5 +404,4 @@ EOF
 else
     echo "stock_picking table not found, skipping POS picking fixes."
 fi
-
 echo "Post migration to 18.0 completed!"
