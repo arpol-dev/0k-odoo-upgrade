@@ -7,6 +7,87 @@ echo "Prepare migration to 18.0..."
 copy_database ou17 ou18 ou18 || exit 1
 
 # ============================================================================
+# FIX: Remove orphaned auto-created 'balance' expressions for French tax
+# report lines before l10n_fr_account's own data files load.
+#
+# Background: account.report.line supports a shortcut syntax where writing
+# a field like 'aggregation_formula' directly on the line auto-creates the
+# underlying account.report.expression via a plain ORM create() (see
+# _create_report_expression() in addons/account/models/account_report.py).
+# This auto-created expression NEVER gets an ir_model_data (xmlid) entry,
+# unlike an explicit <record id="..."> tag processed by the XML data loader.
+#
+# The l10n_fr module (as installed here, an older point release) still uses
+# this shortcut style for these specific report lines. l10n_fr_account (18.0)
+# rewrites the same lines using the modern explicit <record> syntax with a
+# proper xmlid (e.g. tax_report_16_formula). Since our installed l10n_fr never
+# created that xmlid in the first place, OpenUpgrade's rename step
+# (l10n_fr/18.0.2.1/pre-migration.py, module='l10n_fr' -> 'l10n_fr_account')
+# has nothing to rename for these expressions, and l10n_fr_account's own data
+# file then tries to INSERT a fresh expression for the same (report_line_id,
+# label) pair, hitting the "account_report_expression_line_label_uniq"
+# unique constraint against the untracked orphan.
+#
+# OpenUpgrade already recognizes this exact pattern for the 16->17 hop (see
+# _remove_autocreated_expression() in
+# openupgrade_scripts/scripts/l10n_fr/17.0.2.1/pre-migration.py), cleaning up
+# the very same list of report lines. No equivalent exists for 17->18, so we
+# replicate it here, scoped to module='l10n_fr' (the rename to
+# 'l10n_fr_account' only happens later, inside Odoo's own migration
+# framework during the -u all run).
+# ============================================================================
+ORPHAN_EXPRESSION_FIX_SQL=$(cat <<'EOF'
+DELETE FROM account_report_expression
+WHERE label = 'balance'
+AND report_line_id IN (
+    SELECT res_id FROM ir_model_data
+    WHERE module = 'l10n_fr'
+    AND model = 'account.report.line'
+    AND name IN ('tax_report_16', 'tax_report_23', 'tax_report_TIC_total',
+                 'tax_report_X4', 'tax_report_Y1', 'tax_report_Y2',
+                 'tax_report_Y3', 'tax_report_Z4', 'tax_report_32')
+)
+AND id NOT IN (
+    SELECT res_id FROM ir_model_data
+    WHERE module = 'l10n_fr' AND model = 'account.report.expression'
+);
+EOF
+)
+echo "Removing orphaned auto-created 'balance' expressions for French tax report lines..."
+query_postgres_container "$ORPHAN_EXPRESSION_FIX_SQL" ou18 || exit 1
+
+# ============================================================================
+# FIX: Remove legacy web_tour.tour rows with no user_id before OpenUpgrade's
+# web_tour end-migration step runs.
+#
+# Background: in 17.0, web_tour.tour had one row per (user, tour) completion,
+# with a required-in-practice user_id many2one. In 18.0 this became one row
+# per tour (unique by name), with completions tracked via a user_consumed_ids
+# many2many (relation table res_users_web_tour_tour_rel).
+#
+# Some legacy rows have user_id IS NULL: these are tour-registration markers
+# (e.g. a tour existing without ever being completed by a specific user) with
+# no equivalent in the new schema. OpenUpgrade's own
+# web_tour/18.0.1.0/end-migration.py does:
+#   INSERT INTO res_users_web_tour_tour_rel (res_users_id, web_tour_tour_id)
+#   SELECT legacy_table.user_id, web_tour_tour.id FROM legacy_table, ...
+# with no NULL filtering, so it fails with "null value in column
+# res_users_id violates not-null constraint" as soon as one of these rows
+# is present.
+#
+# Fix pushed upstream to OpenUpgrade would solve this properly, but since
+# ou18 runs from a pre-built Docker image, code changes to OpenUpgrade
+# scripts don't take effect without an image rebuild. So, as with the
+# l10n_fr orphan-expression fix above, we clean up the data directly here,
+# before Odoo's own pre-migration.py renames this table aside.
+# ============================================================================
+WEB_TOUR_NULL_USER_FIX_SQL=$(cat <<'EOF'
+DELETE FROM web_tour_tour WHERE user_id IS NULL;
+EOF
+)
+echo "Removing legacy web_tour.tour rows with no user_id..."
+query_postgres_container "$WEB_TOUR_NULL_USER_FIX_SQL" ou18 || exit 1
+# ============================================================================
 # BANK-PAYMENT -> BANK-PAYMENT-ALTERNATIVE MODULE RENAMING
 # Migration from OCA/bank-payment to OCA/bank-payment-alternative
 # Source PR: https://github.com/OCA/bank-payment-alternative/pull/42
