@@ -405,6 +405,26 @@ else
     echo "stock_picking table not found, skipping POS picking fixes."
 fi
 
+# ============================================================================
+# FIX: Reconcile res.config.settings-managed security groups (implied_group
+# fields, e.g. product.group_product_pricelist) via a plain
+# res.config.settings.execute() -- the programmatic equivalent of opening
+# Settings and clicking Save without changing anything.
+#
+# See lib/python/reconcile_settings_groups.py for the full background: a
+# group ending up granted through a path other than the settings
+# framework's own implied-group chain can make a settings boolean compute
+# as unset even though the underlying feature is clearly in use, firing
+# that field's "you are about to deactivate X" @api.onchange warning on
+# every visit to Settings (all Settings menus render the same combined
+# form, so this shows up repeatedly across every app). Generic
+# Odoo/OpenUpgrade behaviour, not specific to any one client or feature;
+# idempotent and safe to always run once after any migration.
+# ============================================================================
+RECONCILE_SETTINGS_SCRIPT="${PROJECT_ROOT}/lib/python/reconcile_settings_groups.py"
+echo "Reconciling res.config.settings-managed security groups..."
+exec_python_script_in_odoo_shell ou18 ou18 "${RECONCILE_SETTINGS_SCRIPT}"
+
 # Same reasoning as in pre_upgrade.sh: bump cache-signaling sequences so any
 # already-running Odoo process for this database sees the fixes above
 # instead of a stale in-memory cache. See invalidate_odoo_caches() in
