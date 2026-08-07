@@ -147,6 +147,82 @@ else
 fi
 
 # ============================================================================
+# ACCOUNT_FACTORING -> ACCOUNT_FACTORING_OCA MODULE RENAMING
+#
+# account_factoring (depends on account_payment_partner + account_payment_mode)
+# is replaced by account_factoring_oca (depends on account_payment_base_oca
+# + account_payment_base_oca_sale) in v18.
+#
+# Both modules have rigorously identical stored fields:
+#   - account_journal: is_factor, factor_fee, factor_holdback_percent,
+#     factor_partner_id, factor_fee_account_id, factor_holdback_account_id,
+#     factor_limit_holdback_account_id, factor_tax_id, factor_validation
+#   - account_move: factor_transfer_id, factor_payment_id,
+#     payment_state_with_factor
+#   - res_partner: factor_credit_limit
+#
+# Renaming (not uninstalling) preserves the 4910 invoice factor statuses,
+# 311 partner credit limits, and journal factor config. OpenUpgrade will
+# treat account_factoring_oca as already installed and adopt the existing
+# columns via ORM _auto_init.
+#
+# MUST run AFTER the bank-payment renaming block above, which creates
+# account_payment_base_oca in the DB.
+# ============================================================================
+ACCOUNT_FACTORING_RENAME_SQL=$(cat <<'EOF'
+DO $$
+DECLARE
+    factor_module_id INTEGER;
+BEGIN
+    SELECT id INTO factor_module_id FROM ir_module_module WHERE name = 'account_factoring';
+    IF factor_module_id IS NOT NULL THEN
+        -- Rename the module itself
+        UPDATE ir_module_module SET name = 'account_factoring_oca' WHERE name = 'account_factoring';
+        UPDATE ir_model_data SET module = 'account_factoring_oca' WHERE module = 'account_factoring';
+
+        -- Rename the module's own external ID (base.module_account_factoring)
+        -- so OpenUpgrade can rediscover the physical account_factoring addon dir
+        -- (which still exists in v18 addons path) without conflicting on
+        -- (base, module_account_factoring) — that xmlid now points to the
+        -- renamed module under its new name.
+        UPDATE ir_model_data
+        SET name = 'module_account_factoring_oca'
+        WHERE module = 'base' AND name = 'module_account_factoring';
+
+        -- Redirect dependencies pointing TO the old name
+        UPDATE ir_module_module_dependency SET name = 'account_factoring_oca' WHERE name = 'account_factoring';
+
+        -- Replace obsolete dependencies (account_payment_partner + account_payment_mode
+        -- no longer exist in v18 addons) with the new OCA equivalents
+        DELETE FROM ir_module_module_dependency
+        WHERE module_id = factor_module_id
+          AND name IN ('account_payment_partner', 'account_payment_mode');
+
+        INSERT INTO ir_module_module_dependency (name, module_id)
+        SELECT 'account_payment_base_oca', factor_module_id
+        WHERE NOT EXISTS (
+            SELECT 1 FROM ir_module_module_dependency
+            WHERE module_id = factor_module_id AND name = 'account_payment_base_oca'
+        );
+
+        INSERT INTO ir_module_module_dependency (name, module_id)
+        SELECT 'account_payment_base_oca_sale', factor_module_id
+        WHERE NOT EXISTS (
+            SELECT 1 FROM ir_module_module_dependency
+            WHERE module_id = factor_module_id AND name = 'account_payment_base_oca_sale'
+        );
+
+        RAISE NOTICE 'Renamed account_factoring -> account_factoring_oca (data preserved)';
+    ELSE
+        RAISE NOTICE 'account_factoring not found, skipping rename';
+    END IF;
+END $$;
+EOF
+)
+echo "Executing account_factoring -> account_factoring_oca renaming..."
+query_postgres_container "$ACCOUNT_FACTORING_RENAME_SQL" ou18 || exit 1
+
+# ============================================================================
 # FIX: Rename company-dependent columns before OpenUpgrade runs
 # In Odoo 18, company-dependent fields are stored as JSONB columns.
 # The ORM's _auto_init() tries to convert existing VARCHAR columns to JSONB,
