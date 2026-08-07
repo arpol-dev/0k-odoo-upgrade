@@ -103,6 +103,69 @@ EOF
 echo "SQL command = $PRE_MIGRATE_SQL_4"
 query_postgres_container "$PRE_MIGRATE_SQL_4" ou17 || exit 1
 
+# ────────────────────────────────────────────────────────────
+# Remove orphan theme.ir.ui.view templates pointing to deleted ir.ui.view
+#
+# In Odoo 17, the asset bundle system was reworked: `web._assets_utils`,
+# `website.assets_editor`, and `website._assets_frontend_helpers` were
+# replaced by the new `ir.asset` model. The theme_common/theme_clean 17.0
+# modules no longer define those templates, but the migrated database still
+# holds the old `theme_ir_ui_view` records (kept by ir_model_data noupdate).
+#
+# Their `inherit_id` Reference field points to ir.ui.view ids that no longer
+# exist. When website's `_theme_load(website)` runs (ir_module_module.py:95)
+# during the registry load, `ThemeView._convert_to_base_model`
+# (theme_models.py:85) accesses `inherit.website_id` on the ghost record and
+# raises MissingError, aborting the whole registry:
+#
+#   odoo.exceptions.MissingError: Record does not exist or has been deleted.
+#   (Record: ir.ui.view(174,), User: 1)
+#
+# This deletes the ir_model_data + theme_ir_ui_view rows whose inherit_id
+# targets a missing ir.ui.view. Generic (covers any theme, idempotent).
+# Scoped to theme_ir_ui_view only. Verified: no ir.ui.view copies exist for
+# the affected templates, so no side effects.
+# ────────────────────────────────────────────────────────────
+PRE_MIGRATE_SQL_5=$(cat <<'EOF'
+DO $$
+DECLARE
+    deleted_imd INTEGER;
+    deleted_tpl INTEGER;
+BEGIN
+    WITH targets AS (
+        SELECT id FROM theme_ir_ui_view
+        WHERE inherit_id LIKE 'ir.ui.view,%'
+          AND NOT EXISTS (
+              SELECT 1 FROM ir_ui_view v
+              WHERE v.id = split_part(theme_ir_ui_view.inherit_id, ',', 2)::int
+          )
+    ),
+    del AS (
+        DELETE FROM ir_model_data
+        WHERE model = 'theme.ir.ui.view'
+          AND res_id IN (SELECT id FROM targets)
+        RETURNING id
+    )
+    SELECT count(*) INTO deleted_imd FROM del;
+
+    WITH del AS (
+        DELETE FROM theme_ir_ui_view
+        WHERE inherit_id LIKE 'ir.ui.view,%'
+          AND NOT EXISTS (
+              SELECT 1 FROM ir_ui_view v
+              WHERE v.id = split_part(theme_ir_ui_view.inherit_id, ',', 2)::int
+          )
+        RETURNING id
+    )
+    SELECT count(*) INTO deleted_tpl FROM del;
+
+    RAISE NOTICE 'Cleaned % stale theme_ir_ui_view record(s) and % ir_model_data entry(ies)', deleted_tpl, deleted_imd;
+END $$;
+EOF
+)
+echo "SQL command = $PRE_MIGRATE_SQL_5"
+query_postgres_container "$PRE_MIGRATE_SQL_5" ou17 || exit 1
+
 # Copy filestores
 copy_filestore ou16 ou16 ou17 ou17 || exit 1
 
