@@ -7,6 +7,56 @@ echo "Prepare migration to 18.0..."
 copy_database ou17 ou18 ou18 || exit 1
 
 # ============================================================================
+# REMOVE contract_payment_mode (depends on obsolete account_payment_partner)
+#
+# contract_payment_mode v18 still depends on account_payment_partner (deleted
+# by the bank-payment renaming below) and uses the obsolete account.payment.mode
+# model. No v18 replacement exists — account_payment_base_oca provides no
+# contract integration. Only 2 contracts had payment_mode_id set, and the
+# migration to the new payment.method.line model is not supported.
+#
+# MUST run BEFORE the bank-payment renaming and BEFORE OpenUpgrade's
+# button_upgrade() which would otherwise crash on the missing dependency.
+#
+# We DELETE the module entirely (like the bank-payment merged_modules pattern)
+# rather than marking it 'to remove', because Odoo's "Transient module states
+# were reset" in load_modules() converts 'to remove' -> 'installed', causing
+# button_upgrade() to re-parse the missing account_payment_partner dependency
+# and abort the registry load. Deleting the row + ir_model_data + dependencies
+# ensures OpenUpgrade's update_list() rediscovers the physical addon as a fresh
+# 'uninstalled' module that button_upgrade() never touches.
+# ============================================================================
+contract_payment_mode_sql=$(cat <<'EOF'
+DO $$
+DECLARE
+    mod_id INTEGER;
+BEGIN
+    SELECT id INTO mod_id FROM ir_module_module WHERE name = 'contract_payment_mode';
+    IF mod_id IS NOT NULL THEN
+        DELETE FROM ir_module_module_dependency WHERE module_id = mod_id;
+        DELETE FROM ir_model_data WHERE module = 'contract_payment_mode';
+        DELETE FROM ir_module_module WHERE id = mod_id;
+
+        -- Rename the module's own external ID (base.module_contract_payment_mode)
+        -- so update_list() can rediscover the physical contract_payment_mode addon
+        -- (which still exists in v18 addons path) without conflicting on
+        -- (base, module_contract_payment_mode). The orphaned xmlid pointed to
+        -- the deleted ir.module.module row and has no other references.
+        UPDATE ir_model_data
+        SET name = 'module_contract_payment_mode_removed'
+        WHERE module = 'base' AND name = 'module_contract_payment_mode';
+
+        RAISE NOTICE 'Removed contract_payment_mode module (depends on obsolete account_payment_partner)';
+    ELSE
+        RAISE NOTICE 'contract_payment_mode not found, skipping';
+    END IF;
+END $$;
+EOF
+)
+echo "Removing contract_payment_mode module..."
+query_postgres_container "$contract_payment_mode_sql" ou18 || exit 1
+
+# ============================================================================
 # BANK-PAYMENT -> BANK-PAYMENT-ALTERNATIVE MODULE RENAMING
 # Migration from OCA/bank-payment to OCA/bank-payment-alternative
 # Source PR: https://github.com/OCA/bank-payment-alternative/pull/42
