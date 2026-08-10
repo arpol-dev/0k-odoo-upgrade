@@ -30,6 +30,29 @@ echo "Purging ir_logging..."
 query_postgres_container "TRUNCATE ir_logging;" "$DB_NAME"
 
 # ────────────────────────────────────────────────────────────
+# Purge resized partner images (128, 256, 512, 1024) and
+# attachments with no res_model (orphaned factur-x, CSS, ICS).
+# Odoo 13+ regenerates thumbnails automatically from
+# image_1920 on the next partner write, so only the full-size
+# source needs to be kept.
+# ────────────────────────────────────────────────────────────
+echo "Purging resized partner images and orphaned attachments..."
+PURGE_ATTACHMENTS_SQL=$(cat <<'EOF'
+DELETE FROM ir_attachment
+WHERE res_model = 'res.partner'
+  AND (name ILIKE '%image_128%'
+    OR name ILIKE '%image_256%'
+    OR name ILIKE '%image_512%'
+    OR name ILIKE '%image_1024%');
+
+DELETE FROM ir_attachment
+WHERE (res_model IS NULL OR res_model = '')
+  AND store_fname IS NOT NULL;
+EOF
+)
+query_postgres_container "$PURGE_ATTACHMENTS_SQL" "$DB_NAME"
+
+# ────────────────────────────────────────────────────────────
 # Fix orphan ir_filters pointing to deleted ir_actions
 #
 # During OpenUpgrade migrations, ir_actions records can be deleted and
