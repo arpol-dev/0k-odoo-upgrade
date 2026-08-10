@@ -122,7 +122,15 @@ SET state = 'installed'
 WHERE state = 'to upgrade';
 " "$DB_NAME" || true
 
+# ────────────────────────────────────────────────────────────
+# Clean orphaned filestore files left behind by the attachment
+# deletions above.  ``_gc_file_store_unsafe`` scans the filestore
+# and removes files that no longer have a matching
+# ``ir_attachment`` record.
+# ────────────────────────────────────────────────────────────
+echo "Cleaning orphaned filestore files..."
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+exec_python_script_in_odoo_shell "$ODOO_SERVICE" "$DB_NAME" "$SCRIPT_DIR/lib/python/file_gc.py"
 
 PYTHON_SCRIPT="${SCRIPT_DIR}/lib/python/fix_duplicated_views.py"
 echo "Remove duplicated views with script $PYTHON_SCRIPT ..."
