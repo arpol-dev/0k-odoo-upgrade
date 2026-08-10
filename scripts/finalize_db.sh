@@ -24,6 +24,12 @@ EOF
 query_postgres_container "$CLEANUP_SQL" "$DB_NAME"
 
 # ────────────────────────────────────────────────────────────
+# Purge ir_logging (Python logger messages, no business value).
+# ────────────────────────────────────────────────────────────
+echo "Purging ir_logging..."
+query_postgres_container "TRUNCATE ir_logging;" "$DB_NAME"
+
+# ────────────────────────────────────────────────────────────
 # Fix orphan ir_filters pointing to deleted ir_actions
 #
 # During OpenUpgrade migrations, ir_actions records can be deleted and
