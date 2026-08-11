@@ -132,6 +132,11 @@ DECLARE
     deleted_imd INTEGER;
     deleted_tpl INTEGER;
 BEGIN
+    IF to_regclass('theme_ir_ui_view') IS NULL THEN
+        RAISE NOTICE 'Table theme_ir_ui_view does not exist, skipping stale view cleanup.';
+        RETURN;
+    END IF;
+
     WITH targets AS (
         SELECT id FROM theme_ir_ui_view
         WHERE inherit_id LIKE 'ir.ui.view,%'
@@ -165,6 +170,46 @@ EOF
 )
 echo "SQL command = $PRE_MIGRATE_SQL_5"
 query_postgres_container "$PRE_MIGRATE_SQL_5" ou17 || exit 1
+
+# ────────────────────────────────────────────────────────────
+# Drop mail.tracking.value rows referencing event.registration.mobile
+#
+# In Odoo 17 the field event.registration.mobile is removed (OpenUpgrade:
+# "event / event.registration / mobile (char) : DEL"). During _process_end,
+# Odoo unlinks the now-orphan ir.model.fields row. mail's ir_model_fields
+# unlink() override iterates the mail.tracking.value rows pointing to it and
+# calls event.registration._mail_track_get_field_sequence('mobile'), which
+# does self._fields['mobile'] -> KeyError: 'mobile', aborting the registry:
+#
+#   KeyError: 'mobile'  (mail/models/models.py, _mail_track_get_field_sequence)
+#
+# The OpenUpgrade event script deletes the field but leaves its tracking
+# values, so any DB that tracked this field crashes. We delete those tracking
+# values beforehand so the field unlinks cleanly.
+# Scoped strictly to event.registration.mobile. Idempotent.
+# NOTE: this runs before -u all, so the FK column is still named 'field'
+# (mail renames it to 'field_id' during the 16->17 upgrade).
+# ────────────────────────────────────────────────────────────
+PRE_MIGRATE_SQL_6=$(cat <<'EOF'
+DO $$
+DECLARE
+    deleted_count INTEGER;
+BEGIN
+    WITH del AS (
+        DELETE FROM mail_tracking_value
+         WHERE field IN (
+             SELECT id FROM ir_model_fields
+              WHERE model = 'event.registration' AND name = 'mobile'
+         )
+        RETURNING id
+    )
+    SELECT count(*) INTO deleted_count FROM del;
+    RAISE NOTICE 'Removed % mail_tracking_value row(s) for event.registration.mobile', deleted_count;
+END $$;
+EOF
+)
+echo "SQL command = $PRE_MIGRATE_SQL_6"
+query_postgres_container "$PRE_MIGRATE_SQL_6" ou17 || exit 1
 
 # Copy filestores
 copy_filestore ou16 ou16 ou17 ou17 || exit 1
