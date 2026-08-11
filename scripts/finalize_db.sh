@@ -24,6 +24,29 @@ EOF
 query_postgres_container "$CLEANUP_SQL" "$DB_NAME"
 
 # ────────────────────────────────────────────────────────────
+# Purge orphaned ``ir.ui.view`` images whose parent view was
+# deleted AND whose ID is not referenced in any other view's
+# HTML (``arch_db``).  An image with ``res_id = 0`` can still
+# be used by a live page via ``/web/image/<id>``, so we only
+# remove it when no ``arch_db`` contains that URL.
+# ────────────────────────────────────────────────────────────
+echo "Purging ir.ui.view images orphaned of their parent view and unreferenced in any arch_db..."
+PURGE_VIEW_IMAGES_SQL=$(cat <<'EOF'
+DELETE FROM ir_attachment a
+WHERE a.res_model = 'ir.ui.view'
+  AND a.mimetype LIKE 'image/%'
+  AND a.store_fname IS NOT NULL
+  AND a.res_id NOT IN (SELECT id FROM ir_ui_view)
+  AND NOT EXISTS (
+    SELECT 1 FROM ir_ui_view v
+    WHERE v.arch_db::text ILIKE '%web/image/' || a.id || '%'
+       OR v.arch_db::text ILIKE '%web/content/' || a.id || '%'
+  );
+EOF
+)
+query_postgres_container "$PURGE_VIEW_IMAGES_SQL" "$DB_NAME"
+
+# ────────────────────────────────────────────────────────────
 # Purge ir_logging (Python logger messages, no business value).
 # ────────────────────────────────────────────────────────────
 echo "Purging ir_logging..."
