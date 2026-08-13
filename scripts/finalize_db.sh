@@ -32,16 +32,24 @@ query_postgres_container "$CLEANUP_SQL" "$DB_NAME"
 # ────────────────────────────────────────────────────────────
 echo "Purging ir.ui.view images orphaned of their parent view and unreferenced in any arch_db..."
 PURGE_VIEW_IMAGES_SQL=$(cat <<'EOF'
-DELETE FROM ir_attachment a
-WHERE a.res_model = 'ir.ui.view'
-  AND a.mimetype LIKE 'image/%'
-  AND a.store_fname IS NOT NULL
-  AND a.res_id NOT IN (SELECT id FROM ir_ui_view)
-  AND NOT EXISTS (
-    SELECT 1 FROM ir_ui_view v
-    WHERE v.arch_db::text ILIKE '%web/image/' || a.id || '%'
-       OR v.arch_db::text ILIKE '%web/content/' || a.id || '%'
-  );
+DO $$
+DECLARE purged int;
+BEGIN
+  WITH refs AS (
+    SELECT DISTINCT (m[1])::bigint AS ref_id
+    FROM ir_ui_view v
+    CROSS JOIN LATERAL regexp_matches(
+        COALESCE(v.arch_db::text, ''), '/web/(?:image|content)/(\d+)', 'g') AS m
+  )
+  DELETE FROM ir_attachment a
+  WHERE a.res_model = 'ir.ui.view'
+    AND a.mimetype  LIKE 'image/%'
+    AND a.store_fname IS NOT NULL
+    AND a.res_id NOT IN (SELECT id FROM ir_ui_view)
+    AND NOT EXISTS (SELECT 1 FROM refs r WHERE r.ref_id = a.id);
+  GET DIAGNOSTICS purged = ROW_COUNT;
+  RAISE NOTICE 'Purged % orphaned ir.ui.view image attachments', purged;
+END $$;
 EOF
 )
 query_postgres_container "$PURGE_VIEW_IMAGES_SQL" "$DB_NAME"
