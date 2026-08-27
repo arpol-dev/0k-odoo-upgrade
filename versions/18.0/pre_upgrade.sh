@@ -147,7 +147,8 @@ DECLARE
         ['account_payment_mode', 'account_payment_base_oca'],
         ['account_banking_pain_base', 'account_payment_sepa_base'],
         ['account_banking_sepa_credit_transfer', 'account_payment_sepa_credit_transfer'],
-        ['account_payment_order', 'account_payment_batch_oca']
+        ['account_payment_order', 'account_payment_batch_oca'],
+        ['account_banking_mandate', 'account_payment_mandate']
     ];
     merged_modules TEXT[][] := ARRAY[
         ['account_payment_partner', 'account_payment_base_oca']

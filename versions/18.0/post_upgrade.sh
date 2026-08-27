@@ -13,8 +13,11 @@ echo "Post migration to 18.0..."
 # Check if account_payment_mode table exists (meaning the module was installed before migration)
 BANK_PAYMENT_TABLE_EXISTS=$(query_postgres_container "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'account_payment_mode';" ou18 2>/dev/null | grep -E '^\s*[0-9]+' | tr -d ' ' || echo "0")
 
-if [ "$BANK_PAYMENT_TABLE_EXISTS" -gt 0 ]; then
-    echo "Table account_payment_mode exists, proceeding with bank-payment data migration..."
+# Check if OCA module migration already ran (it runs during Odoo upgrade when bank-payment-alternative is in addons path)
+BANK_PAYMENT_ALREADY_MIGRATED=$(query_postgres_container "SELECT COUNT(*) FROM information_schema.columns WHERE table_name='account_payment_method_line' AND column_name='old_payment_mode_id';" ou18 2>/dev/null | grep -E '^\s*[0-9]+' | tr -d ' ' || echo "0")
+
+if [ "$BANK_PAYMENT_TABLE_EXISTS" -gt 0 ] && [ "$BANK_PAYMENT_ALREADY_MIGRATED" -eq 0 ]; then
+    echo "Table account_payment_mode exists and OCA migration not yet run, proceeding with bank-payment data migration..."
 
     BANK_PAYMENT_POST_SQL=$(cat <<'EOF'
 DO $$

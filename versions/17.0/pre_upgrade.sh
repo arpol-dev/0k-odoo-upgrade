@@ -211,6 +211,52 @@ EOF
 echo "SQL command = $PRE_MIGRATE_SQL_6"
 query_postgres_container "$PRE_MIGRATE_SQL_6" ou17 || exit 1
 
+PRE_MIGRATE_SQL_7=$(cat <<'EOF'
+/* OpenUpgrade 16→17 hr post-migration tries to delete hr.res_partner_admin_private_address
+   which resolves to the Administrator's own res.partner (protected by _unlink_except_user).
+   Remove the XML ID so delete_records_safely_by_xml_id skips it. */
+DELETE FROM ir_model_data WHERE module = 'hr' AND name = 'res_partner_admin_private_address';
+EOF
+)
+echo "SQL command = $PRE_MIGRATE_SQL_7"
+query_postgres_container "$PRE_MIGRATE_SQL_7" ou17 || exit 1
+
+PRE_MIGRATE_SQL_8=$(cat <<'EOF'
+/* project/17.0.1.3/post-migration.py::_convert_project_task_repeat_type_after
+   converts repeat_type='after' recurrences (month/year unit) to repeat_type='until'
+   by computing repeat_until = MAX(task.date_deadline) + recurrence_left*repeat_interval
+   months/years. It anchors on the date_deadline of the OLDEST task carrying a non-null
+   value (usually the very first occurrence ever generated), ignoring how much time has
+   elapsed since. If real time has passed since that first occurrence, the computed
+   repeat_until lands in the past and violates project.task.recurrence's own
+   _check_repeat_until_date constraint (repeat_until must be >= today), crashing the
+   whole 16→17 upgrade.
+
+   Fix: recompute date_deadline right before the OpenUpgrade script runs, using
+   next_recurrence_date as the anchor instead (always current/future by construction) so
+   the script's own math lands safely ahead of today. For a recurrence that has already
+   completed (next_recurrence_date IS NULL, no next occurrence scheduled), there's no
+   sensible replacement date left to compute — delete the recurrence outright, leaving
+   its historical tasks orphaned (recurrence_id -> NULL via ON DELETE SET NULL) rather
+   than fabricate one; this also removes it from the OpenUpgrade script's query entirely,
+   avoiding an invalid repeat_type='after' leftover (removed from the Selection in 17.0).
+*/
+DELETE FROM project_task_recurrence
+WHERE repeat_type = 'after' AND repeat_unit IN ('month','year')
+  AND next_recurrence_date IS NULL;
+
+UPDATE project_task
+SET date_deadline = ptr.next_recurrence_date - (ptr.repeat_interval || ' ' || ptr.repeat_unit)::interval
+FROM project_task_recurrence ptr
+WHERE project_task.recurrence_id = ptr.id
+  AND ptr.repeat_type = 'after'
+  AND ptr.repeat_unit IN ('month', 'year')
+  AND project_task.date_deadline IS NOT NULL;
+EOF
+)
+echo "SQL command = $PRE_MIGRATE_SQL_8"
+query_postgres_container "$PRE_MIGRATE_SQL_8" ou17 || exit 1
+
 # Copy filestores
 copy_filestore ou16 ou16 ou17 ou17 || exit 1
 

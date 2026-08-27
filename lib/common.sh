@@ -38,6 +38,10 @@ confirm_or_exit() {
     echo "$message"
     echo "Y - Yes, continue"
     echo "N - No, cancel"
+    if [[ "${MIGRATE_YES:-}" == "1" ]]; then
+        echo "Your choice: Y (auto-confirmed via MIGRATE_YES=1)"
+        return 0
+    fi
     read -r -n 1 -p "Your choice: " choice
     echo ""
     # Drain any leftover buffered input (e.g. the Enter keystroke left over from a
