@@ -257,6 +257,33 @@ EOF
 echo "SQL command = $PRE_MIGRATE_SQL_8"
 query_postgres_container "$PRE_MIGRATE_SQL_8" ou17 || exit 1
 
+PRE_MIGRATE_SQL_9=$(cat <<'EOF'
+/* hr/17.0.1.1/post-migration.py deletes several core noupdate records that
+   Odoo dropped from its own default/demo data set between 16.0 and 17.0,
+   including hr.dep_sales (department "Sales"), via
+   openupgrade.delete_records_safely_by_xml_id(). This blindly deletes the
+   record wherever it still exists in the target database, with no check for
+   whether the customer has since renamed/repurposed it as a real business
+   department. Deleting hr.department cascades (ON DELETE SET NULL) through
+   hr_employee.department_id and every stored compute field derived from it
+   (hr_leave.department_id, hr_leave_allocation.department_id,
+   account_analytic_line.department_id, plus any Studio field pointing at
+   hr.department), silently orphaning real HR/timesheet data for whichever
+   employees are still assigned to that department at migration time.
+
+   A default department renamed and reused by the customer is real business
+   data, not demo data — deleting it during a migration makes no sense.
+   Fix: remove the XML ID so delete_records_safely_by_xml_id finds nothing to
+   delete and leaves the (possibly repurposed) department record untouched.
+   Safe even if the department was never renamed: Odoo's own migration
+   doesn't need this record deleted, it just stops shipping it as a default
+   going forward — an existing row isn't affected either way. */
+DELETE FROM ir_model_data WHERE module = 'hr' AND name = 'dep_sales';
+EOF
+)
+echo "SQL command = $PRE_MIGRATE_SQL_9"
+query_postgres_container "$PRE_MIGRATE_SQL_9" ou17 || exit 1
+
 # Copy filestores
 copy_filestore ou16 ou16 ou17 ou17 || exit 1
 
