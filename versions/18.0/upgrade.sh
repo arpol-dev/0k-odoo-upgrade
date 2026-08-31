@@ -8,4 +8,4 @@ set -euo pipefail
 # native migration scripts would no longer run. Odoo appends every listed path
 # to odoo.upgrade.__path__ and concatenates (does not override) the scripts
 # found per module/version, so our script runs IN ADDITION to the native ones.
-run_compose run -p 8018:8069 ou18 --config=/opt/odoo/auto/odoo.conf --stop-after-init -u all --workers 0 --log-level=debug --max-cron-threads=0 --limit-time-real=10000 --database=ou18 --load=base,web,openupgrade_framework --addons-path=/opt/odoo/auto/mig,/opt/odoo/auto/addons --upgrade-path=/opt/odoo/auto/upgrade,/opt/odoo/auto/addons/openupgrade_scripts/scripts
+run_compose run -p 8018:8069 ou18 --config=/opt/odoo/auto/odoo.conf --stop-after-init --update=all --workers 0 --log-level=debug --max-cron-threads=0 --limit-time-real=10000 --database=ou18 --load=base,web,openupgrade_framework --addons-path=/opt/odoo/auto/mig,/opt/odoo/auto/addons --upgrade-path=/opt/odoo/auto/upgrade,/opt/odoo/auto/addons/openupgrade_scripts/scripts

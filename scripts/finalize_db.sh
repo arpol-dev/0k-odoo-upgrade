@@ -204,7 +204,7 @@ fi
 
 
 # Launch Odoo with database in finale version to run all updates
-run_compose --debug run "$ODOO_SERVICE" -u all --log-level=debug --stop-after-init --no-http --load=base,web,openupgrade_framework
+run_compose --debug run "$ODOO_SERVICE" --update=all --log-level=debug --stop-after-init --no-http --load=base,web,openupgrade_framework
 
 echo ""
 echo "Running post-migration view validation..."
