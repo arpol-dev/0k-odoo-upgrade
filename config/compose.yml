@@ -102,6 +102,20 @@ ou19:
   options:
     workers: 0
 
+ou20:
+  charm: odoo-tecnativa
+  docker-compose:
+    image: docker.0k.io/mirror/odoo:rc_20.0-ELABORE-LIGHT
+    ## Important to keep as a list: otherwise it'll overwrite charm's arguments.
+    command:
+      - "--log-level=debug"
+      - "--limit-time-cpu=1000000"
+      - "--limit-time-real=1000000"
+    volumes:
+       - /home/stephan/dev/Odoo/0k-odoo-upgrade/versions/20.0/addons/:/opt/odoo/auto/mig:rw
+  options:
+    workers: 0
+
 postgres:
   docker-compose:
     image: docker.0k.io/postgres:17.2.0-myc

@@ -1,0 +1,8 @@
+# Modules that became obsolete in version 20.0
+obsolete: []
+
+# Modules merged into Odoo Core in version 20.0
+merged_in_core: []
+
+# Modules renamed in version 20.0
+renamed: []
