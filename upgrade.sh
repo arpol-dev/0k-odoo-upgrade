@@ -8,7 +8,7 @@ readonly LOG_FILE="${SCRIPT_DIR}/migration.log"
 if [[ -z "${_MIGRATION_LOGGING:-}" ]]; then
     rm -f "$LOG_FILE"
     export _MIGRATION_LOGGING=1
-    exec script -q -c "$(printf '%q ' "$0" "$@")" "$LOG_FILE"
+    exec script -q -e -c "$(printf '%q ' "$0" "$@")" "$LOG_FILE"
 fi
 
 ####################
