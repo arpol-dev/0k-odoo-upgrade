@@ -41,6 +41,12 @@ Options:
                      scripts inherit all functions and variables exported by
                      lib/common.sh (query_postgres_container, log_*,
                      PROJECT_ROOT, ...) plus MIGRATION_DIR itself.
+                     If <path>/prepare_origin.sh exists and is executable,
+                     it is run once on the copy of the origin database
+                     (ou<origin_version>, COPY_DB_NAME), right after it is
+                     created and before prepare_db.sh: the place to clean up
+                     the source with the ORIGIN Odoo version (e.g. properly
+                     uninstall add-ons that are abandoned in the target).
 
 Examples:
     $0 14 18 elabore_20241208 odoo14
@@ -105,7 +111,8 @@ fi
 export MIGRATION_DIR
 readonly MIGRATION_DIR
 
-readonly COPY_DB_NAME="ou${ORIGIN_VERSION}"
+export COPY_DB_NAME="ou${ORIGIN_VERSION}"
+readonly COPY_DB_NAME
 export FINALE_DB_NAME="ou${FINAL_VERSION}"
 readonly FINALE_DB_NAME
 readonly FINALE_SERVICE_NAME="${FINALE_DB_NAME}"
@@ -227,6 +234,12 @@ if [[ -z "$RESUME_FROM_VERSION" ]]; then
 
     copy_filestore "$ORIGIN_SERVICE_NAME" "$ORIGIN_DB_NAME" "$COPY_DB_NAME" "$COPY_DB_NAME"
     log_info "Original filestore copied."
+
+    if [[ -n "$MIGRATION_DIR" && -x "${MIGRATION_DIR}/prepare_origin.sh" ]]; then
+        log_step "MIGRATION-SPECIFIC ORIGIN PREPARATION"
+        log_info "Running ${MIGRATION_DIR}/prepare_origin.sh on ${COPY_DB_NAME}"
+        "${MIGRATION_DIR}/prepare_origin.sh"
+    fi
 else
     log_step "COPY ORIGINAL COMPONENTS — SKIPPED (resuming from checkpoint ou${RESUME_FROM_VERSION})"
 fi
