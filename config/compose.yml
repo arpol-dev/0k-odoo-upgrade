@@ -83,22 +83,23 @@ ou18:
       - "--limit-time-cpu=1000000"
       - "--limit-time-real=1000000"
     volumes:
-       - /home/stephan/dev/Odoo/0k-odoo-upgrade/versions/18.0/addons/:/opt/odoo/auto/mig:rw
-       - /home/stephan/dev/Odoo/0k-odoo-upgrade/versions/18.0/scripts/:/opt/odoo/auto/upgrade:rw
+       - /srv/migrations/0k-odoo-upgrade/versions/18.0/addons/:/opt/odoo/auto/mig:rw
+       - /srv/migrations/0k-odoo-upgrade/versions/18.0/scripts/:/opt/odoo/auto/upgrade:rw
   options:
     workers: 0
 
 ou19:
   charm: odoo-tecnativa
   docker-compose:
-    image: docker.0k.io/mirror/odoo:rc_19.0-ELABORE-LIGHT
+    image: docker.0k.io/mirror/odoo:rc_19.0-ArPol
     ## Important to keep as a list: otherwise it'll overwrite charm's arguments.
     command:
       - "--log-level=debug"
       - "--limit-time-cpu=1000000"
       - "--limit-time-real=1000000"
     volumes:
-       - /home/stephan/dev/Odoo/0k-odoo-upgrade/versions/19.0/addons/:/opt/odoo/auto/mig:rw
+       - /srv/migrations/0k-odoo-upgrade/versions/19.0/addons/:/opt/odoo/auto/mig:rw
+       - /srv/migrations/0k-odoo-upgrade/versions/19.0/scripts/:/opt/odoo/auto/upgrade:rw
   options:
     workers: 0
 
@@ -112,7 +113,8 @@ ou20:
       - "--limit-time-cpu=1000000"
       - "--limit-time-real=1000000"
     volumes:
-       - /home/stephan/dev/Odoo/0k-odoo-upgrade/versions/20.0/addons/:/opt/odoo/auto/mig:rw
+       - /srv/migrations/0k-odoo-upgrade/versions/20.0/addons/:/opt/odoo/auto/mig:rw
+       - /srv/migrations/0k-odoo-upgrade/versions/20.0/scripts/:/opt/odoo/auto/upgrade:rw
   options:
     workers: 0
 
