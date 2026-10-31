@@ -177,6 +177,71 @@ else
 fi
 
 # ============================================================================
+# Payment modes of sale orders and partners (bank-payment -> native payment
+# method lines). Runs whichever path migrated the payment modes, as long as
+# account_payment_method_line.old_payment_mode_id is filled.
+# - sale orders: account_payment_sale is renamed account_payment_base_oca_sale
+#   in pre_upgrade.sh, which has no migration script for the data;
+# - partners: values kept aside by pre_upgrade.sh (_0k_bank_payment_partner_mode)
+#   go to the native company-dependent jsonb fields.
+# ============================================================================
+PAYMENT_MODE_LINKS_SQL=$(cat <<'EOF'
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_name = 'account_payment_method_line'
+                   AND column_name = 'old_payment_mode_id') THEN
+        RAISE NOTICE 'No old_payment_mode_id mapping, skipping payment mode links';
+        RETURN;
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM information_schema.columns
+               WHERE table_name = 'sale_order' AND column_name = 'payment_mode_id')
+       AND EXISTS (SELECT 1 FROM information_schema.columns
+               WHERE table_name = 'sale_order' AND column_name = 'payment_method_line_id') THEN
+        UPDATE sale_order so
+        SET payment_method_line_id = apml.id
+        FROM account_payment_method_line apml
+        WHERE apml.old_payment_mode_id = so.payment_mode_id
+        AND so.payment_method_line_id IS NULL;
+    END IF;
+
+    IF to_regclass('_0k_bank_payment_partner_mode') IS NOT NULL THEN
+        UPDATE res_partner rp
+        SET property_inbound_payment_method_line_id =
+                coalesce(rp.property_inbound_payment_method_line_id, '{}'::jsonb) || s.val
+        FROM (
+            SELECT m.partner_id, jsonb_object_agg(c.id::text, apml.id) AS val
+            FROM _0k_bank_payment_partner_mode m
+            JOIN account_payment_method_line apml ON apml.old_payment_mode_id = m.payment_mode_id
+            JOIN res_company c ON c.id = coalesce(m.company_id, c.id)
+            WHERE m.field = 'customer_payment_mode_id'
+            GROUP BY m.partner_id
+        ) s
+        WHERE rp.id = s.partner_id;
+
+        UPDATE res_partner rp
+        SET property_outbound_payment_method_line_id =
+                coalesce(rp.property_outbound_payment_method_line_id, '{}'::jsonb) || s.val
+        FROM (
+            SELECT m.partner_id, jsonb_object_agg(c.id::text, apml.id) AS val
+            FROM _0k_bank_payment_partner_mode m
+            JOIN account_payment_method_line apml ON apml.old_payment_mode_id = m.payment_mode_id
+            JOIN res_company c ON c.id = coalesce(m.company_id, c.id)
+            WHERE m.field = 'supplier_payment_mode_id'
+            GROUP BY m.partner_id
+        ) s
+        WHERE rp.id = s.partner_id;
+
+        DROP TABLE _0k_bank_payment_partner_mode;
+    END IF;
+END $$;
+EOF
+)
+echo "Linking sale orders and partners to the migrated payment methods..."
+query_postgres_container "$PAYMENT_MODE_LINKS_SQL" ou18 || exit 1
+
+# ============================================================================
 # FIX: stock_picking name='/' and missing POS picking type sequences
 #
 # Two issues can occur after migration:

@@ -140,6 +140,28 @@ BANK_PAYMENT_INSTALLED=$(query_postgres_container "SELECT COUNT(*) FROM ir_modul
 if [ "$BANK_PAYMENT_INSTALLED" -gt 0 ]; then
     echo "Module account_payment_mode is installed, proceeding with bank-payment migration..."
 
+    # Partner payment modes (account_payment_partner) are company-dependent
+    # ir.property values in 17.0. account_payment_partner has no 18.0 code, so
+    # they would be lost: keep them aside for post_upgrade.sh, which maps them
+    # onto the native property_inbound/outbound_payment_method_line_id.
+    BANK_PAYMENT_STASH_SQL=$(cat <<'EOF'
+DROP TABLE IF EXISTS _0k_bank_payment_partner_mode;
+CREATE TABLE _0k_bank_payment_partner_mode AS
+SELECT f.name AS field,
+       split_part(p.res_id, ',', 2)::integer AS partner_id,
+       p.company_id,
+       split_part(p.value_reference, ',', 2)::integer AS payment_mode_id
+FROM ir_property p
+JOIN ir_model_fields f ON f.id = p.fields_id
+WHERE f.model = 'res.partner'
+  AND f.name IN ('customer_payment_mode_id', 'supplier_payment_mode_id')
+  AND p.res_id LIKE 'res.partner,%'
+  AND p.value_reference LIKE 'account.payment.mode,%';
+EOF
+    )
+    echo "Keeping partner payment modes aside..."
+    query_postgres_container "$BANK_PAYMENT_STASH_SQL" ou18 || exit 1
+
     BANK_PAYMENT_RENAME_SQL=$(cat <<'EOF'
 DO $$
 DECLARE
@@ -148,7 +170,8 @@ DECLARE
         ['account_banking_pain_base', 'account_payment_sepa_base'],
         ['account_banking_sepa_credit_transfer', 'account_payment_sepa_credit_transfer'],
         ['account_payment_order', 'account_payment_batch_oca'],
-        ['account_banking_mandate', 'account_payment_mandate']
+        ['account_banking_mandate', 'account_payment_mandate'],
+        ['account_payment_sale', 'account_payment_base_oca_sale']
     ];
     merged_modules TEXT[][] := ARRAY[
         ['account_payment_partner', 'account_payment_base_oca']
@@ -168,6 +191,20 @@ BEGIN
             UPDATE ir_module_module SET name = new_name WHERE name = old_name;
             UPDATE ir_model_data SET module = new_name WHERE module = old_name;
             UPDATE ir_module_module_dependency SET name = new_name WHERE name = old_name;
+            -- Also rename the module's own xml-id (base.module_<name>), as
+            -- openupgradelib.update_module_names() does. Left behind, it points
+            -- to the renamed module and collides with later OpenUpgrade renames
+            -- (19.0: account_payment_partner -> account_payment_mode).
+            IF EXISTS (SELECT 1 FROM ir_model_data
+                       WHERE module = 'base' AND name = 'module_' || new_name) THEN
+                DELETE FROM ir_model_data
+                WHERE module = 'base' AND name = 'module_' || old_name
+                AND model = 'ir.module.module';
+            ELSE
+                UPDATE ir_model_data SET name = 'module_' || new_name
+                WHERE module = 'base' AND name = 'module_' || old_name
+                AND model = 'ir.module.module';
+            END IF;
         END IF;
     END LOOP;
 
@@ -191,6 +228,10 @@ BEGIN
             UPDATE ir_module_module_dependency SET name = new_name WHERE name = old_name;
             UPDATE ir_module_module SET state = 'uninstalled' WHERE name = old_name;
             DELETE FROM ir_module_module WHERE name = old_name;
+            -- The module row is gone: drop its own xml-id (base.module_<name>) too
+            DELETE FROM ir_model_data
+            WHERE module = 'base' AND name = 'module_' || old_name
+            AND model = 'ir.module.module';
         END IF;
     END LOOP;
 END $$;
